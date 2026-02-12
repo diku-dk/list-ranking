@@ -1,0 +1,6 @@
+list_ranking
+data
+lib
+*.actual
+*.expected
+*.c
