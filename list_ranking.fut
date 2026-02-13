@@ -227,7 +227,8 @@ module random_mate_optim : list_ranking = {
          in (scatter R RA_now updateR)
 }
 
-entry generate_list (n: i64) (seed: i32) : [n]i64 =
+entry random_list (n: i64) : [n]i64 =
+  let seed = 13632
   let rng = rng_engine.rng_from_seed [seed]
   let rng' = xorshift128plus.rng_from_seed [seed]
   let (_, h) = rand_i64.rand (0i64, (n - 1)) rng
@@ -237,6 +238,17 @@ entry generate_list (n: i64) (seed: i32) : [n]i64 =
   let lst[h] = n
   in lst
 
+entry strided_list (n: i64) (s: i64) =
+  let f i =
+    let next = i + s
+    let run = i % s + 1
+    in if next < n
+       then next
+       else if run < s
+       then run
+       else n
+  in tabulate n f
+
 def mk_test list_ranking S =
   let expected = wyllie.list_ranking S
   let res = list_ranking S
@@ -244,35 +256,33 @@ def mk_test list_ranking S =
 
 -- ==
 -- entry: sequential_test random_mate_test random_mate_optim_test
--- "n=10"     compiled nobench script input { generate_list 10i64 13632i32 } output { true }
--- "n=100"    compiled nobench script input { generate_list 100i64 13632i32 } output { true }
--- "n=1000"   compiled nobench script input { generate_list 1000i64 13632i32 } output { true }
--- "n=10000"  compiled nobench script input { generate_list 10000i64 13632i32 } output { true }
--- "n=100000" compiled nobench script input { generate_list 100000i64 13632i32 } output { true }
+-- "n=100000,s=1"     compiled nobench script input { strided_list 10000i64 1i64 }  output { true }
+-- "n=100000,s=10"    compiled nobench script input { strided_list 10000i64 10i64 } output { true }
+-- "n=100000,s=100"   compiled nobench script input { strided_list 10000i64 10i64 } output { true }
 entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
 
--- ==
 -- entry: sequential_bench
--- "n=10"      compiled notest no_cuda no_opencl no_hip script input { generate_list 10i64 13632i32 }
--- "n=100"     compiled notest no_cuda no_opencl no_hip script input { generate_list 100i64 13632i32 }
--- "n=1000"    compiled notest no_cuda no_opencl no_hip script input { generate_list 1000i64 13632i32 }
--- "n=10000"   compiled notest no_cuda no_opencl no_hip script input { generate_list 10000i64 13632i32 }
--- "n=100000"  compiled notest no_cuda no_opencl no_hip script input { generate_list 100000i64 13632i32 }
--- "n=1000000" compiled notest no_cuda no_opencl no_hip script input { generate_list 1000000i64 13632i32 }
+-- "n=10"      compiled notest no_cuda no_opencl no_hip script input { random_list 10i64 }
+-- "n=100"     compiled notest no_cuda no_opencl no_hip script input { random_list 100i64 }
+-- "n=1000"    compiled notest no_cuda no_opencl no_hip script input { random_list 1000i64 }
+-- "n=10000"   compiled notest no_cuda no_opencl no_hip script input { random_list 10000i64 }
+-- "n=100000"  compiled notest no_cuda no_opencl no_hip script input { random_list 100000i64 }
+-- "n=1000000" compiled notest no_cuda no_opencl no_hip script input { random_list 1000000i64 }
 entry sequential_bench = sequential.list_ranking
 
 -- ==
 -- entry: wyllie_bench random_mate_bench random_mate_optim_bench
--- "n=10"        compiled notest script input { generate_list 10i64 13632i32 }
--- "n=100"       compiled notest script input { generate_list 100i64 13632i32 }
--- "n=1000"      compiled notest script input { generate_list 1000i64 13632i32 }
--- "n=10000"     compiled notest script input { generate_list 10000i64 13632i32 }
--- "n=100000"    compiled notest script input { generate_list 100000i64 13632i32 }
--- "n=1000000"   compiled notest script input { generate_list 1000000i64 13632i32 }
--- "n=10000000"  compiled notest script input { generate_list 10000000i64 13632i32 }
--- "n=100000000" compiled notest script input { generate_list 100000000i64 13632i32 }
+-- compiled notest script input { random_list  10000000i64 }
+-- compiled notest script input { strided_list 10000000i64 1i64 }
+-- compiled notest script input { strided_list 10000000i64 10i64 }
+-- compiled notest script input { strided_list 10000000i64 100i64 }
 entry wyllie_bench = wyllie.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_optim_bench = random_mate_optim.list_ranking
+
+entry average_stride [n] (S: [n]i64) =
+  map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
+  |> f64.sum
+  |> (/ f64.i64 n)
