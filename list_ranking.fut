@@ -49,6 +49,14 @@ module rand_i8 = uniform_int_distribution i8 u32 rng_engine
 module rand_i64 = uniform_int_distribution i64 u32 rng_engine
 module shuffle = mk_shuffle u64 xorshift128plus
 
+local
+def hash (x: i32) : i32 =
+  let x = u32.i32 x
+  let x = ((x >> 16) ^ x) * 0x45d9f3b
+  let x = ((x >> 16) ^ x) * 0x45d9f3b
+  let x = ((x >> 16) ^ x)
+  in i32.u32 x
+
 -- Random Mate as described in 'List ranking and parallel tree contraction' by
 -- M. Reid-Miller, G. L. Miller, and F. Modugno, although with adaptations to
 -- the data parallel model.
@@ -78,9 +86,8 @@ module random_mate : list_ranking = {
                 (removed_offsets: *[]i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, *[]i64) =
     -- originally in round
     let sexes_vals = [#F : sex, #M]
-    -- 4243 and 731705 are carefully chosen constants.
-    -- NEVER put a combination of even odd
-    let sexes' = map (\i -> sexes_vals[((i + 1 + t) * 4243 + 713705) % 2]) (indices active)
+    let sexes' =
+      tabulate m (\i -> sexes_vals[hash (i32.i64 (i ^ t)) % 2])
     let sexes' = scatter sexes active sexes'
     let update i =
       if S[i] == n
@@ -161,9 +168,8 @@ module random_mate_optim : list_ranking = {
                    (removed_offsets: *[]i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, *[]i64) =
     -- originally in round
     let sexes_vals = [#F : sex, #M]
-    -- 4243 and 731705 are carefully chosen constants.
-    -- NEVER put a combination of even odd
-    let sexes' = map (\i -> sexes_vals[((i + 1 + t) * 4243 + 713705) % 2]) (indices active)
+    let sexes' =
+      tabulate m (\i -> sexes_vals[hash (i32.i64 i) % 2])
     let sexes' = scatter sexes active sexes'
     let update i =
       if S[i] == n
