@@ -59,10 +59,11 @@ module random_mate : list_ranking = {
                 (t: i64)
                 (dead: [k]i64)
                 (removed: *[n]i64)
-                (removed_offsets: []i64) : (*[n]i64, []i64) =
+                (removed_offsets: *[]i64) : (*[n]i64, *[]i64) =
     let removed' =
-      scatter removed (map (+ removed_offsets[t - 1]) (iota k)) dead
-    let removed_offsets' = removed_offsets ++ [k + removed_offsets[t - 1]]
+      scatter removed (tabulate k (+ removed_offsets[t - 1])) dead
+    let removed_offsets' =
+      removed_offsets with [t] = k + removed_offsets[t - 1]
     in (removed', removed_offsets')
 
   -- note we have m <= n
@@ -74,7 +75,7 @@ module random_mate : list_ranking = {
                 (sexes: *[n]sex)
                 (keep: *[n]bool)
                 (removed: *[n]i64)
-                (removed_offsets: []i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, []i64) =
+                (removed_offsets: *[]i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, *[]i64) =
     -- originally in round
     let sexes_vals = [#F : sex, #M]
     -- 4243 and 731705 are carefully chosen constants.
@@ -97,15 +98,16 @@ module random_mate : list_ranking = {
     let (update_idx, rm_idx) = unzip (map update active)
     -- book keeping
     let R' =
-      scatter R update_idx (map (\i -> if i == (-1i64) then -1i32 else R[i] + R[S[i]]) update_idx)
+      scatter R update_idx (map (\i -> if i == -1 then -1 else R[i] + R[S[i]]) update_idx)
     let S' =
-      scatter S update_idx (map (\i -> if i == (-1i64) then -1i64 else S[S[i]]) update_idx)
+      scatter S update_idx (map (\i -> if i == -1 then -1 else S[S[i]]) update_idx)
     let sexes' = scatter sexes' rm_idx (rep #M)
     -- calc. new active cells
     let keep' = scatter keep rm_idx (rep false)
     let (active', dead) = copy (partition (\i -> keep'[i]) active)
     -- Bury the dead (inactive cells) in the graveyard (removed)
-    let (removed', removed_offsets') = bury_dead t dead removed removed_offsets
+    let (removed', removed_offsets') =
+      bury_dead t dead removed removed_offsets
     in (R', S', t + 1i64, active', sexes', keep', removed', removed_offsets')
 
   def list_ranking [n] (S: [n]i64) : [n]i32 =
@@ -115,7 +117,7 @@ module random_mate : list_ranking = {
     let active = iota n
     let keep = replicate n true
     let removed = replicate n (-1i64)
-    let removed_offsets = [0]
+    let removed_offsets = replicate n 0
     let (R, S, t, _, _, _, removed, removed_offsets) =
       -- Pointer jumping phase
       loop (R, S, t, active, sexes, keep, removed, removed_offsets) =
@@ -140,10 +142,11 @@ module random_mate_optim : list_ranking = {
                 (t: i64)
                 (dead: [k]i64)
                 (removed: *[n]i64)
-                (removed_offsets: []i64) : (*[n]i64, []i64) =
+                (removed_offsets: *[]i64) : (*[n]i64, *[]i64) =
     let removed' =
-      scatter removed (map (+ removed_offsets[t - 1]) (iota k)) dead
-    let removed_offsets' = removed_offsets ++ [k + removed_offsets[t - 1]]
+      scatter removed (tabulate k (+ removed_offsets[t - 1])) dead
+    let removed_offsets' =
+      removed_offsets with [t] = k + removed_offsets[t - 1]
     in (removed', removed_offsets')
 
   -- note we have m <= n
@@ -155,7 +158,7 @@ module random_mate_optim : list_ranking = {
                    (sexes: *[n]sex)
                    (keep: *[n]bool)
                    (removed: *[n]i64)
-                   (removed_offsets: []i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, []i64) =
+                   (removed_offsets: *[]i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, *[]i64) =
     -- originally in round
     let sexes_vals = [#F : sex, #M]
     -- 4243 and 731705 are carefully chosen constants.
@@ -178,10 +181,8 @@ module random_mate_optim : list_ranking = {
            (R[i], S[i], -1i64)
     let (R', S', rm_idx) = unzip3 (map update active)
     -- book keeping
-    let R' =
-      scatter R active R'
-    let S' =
-      scatter S active S'
+    let R' = scatter R active R'
+    let S' = scatter S active S'
     let sexes' = scatter sexes' rm_idx (rep #M)
     -- calc. new active cells
     let keep' = scatter keep rm_idx (rep false)
@@ -208,7 +209,7 @@ module random_mate_optim : list_ranking = {
     let active = iota n
     let keep = replicate n true
     let removed = replicate n (-1i64)
-    let removed_offsets = [0]
+    let removed_offsets = replicate n 0
     let cut_off = n / ilog2 n
     let (R, S, t, active, _, _, removed, removed_offsets) =
       -- Pointer jumping phase
