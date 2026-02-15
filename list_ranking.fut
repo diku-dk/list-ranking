@@ -84,10 +84,8 @@ module random_mate : list_ranking = {
                 (keep: *[n]bool)
                 (removed: *[n]i64)
                 (removed_offsets: *[]i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, *[]i64) =
-    -- originally in round
-    let sexes_vals = [#F : sex, #M]
     let sexes' =
-      tabulate m (\i -> sexes_vals[hash (i32.i64 (i ^ t)) % 2])
+      tabulate m (\i -> if hash (i32.i64 (i ^ t)) % 2 == 0 then #F else #M)
     let sexes' = scatter sexes active sexes'
     let update i =
       if S[i] == n
@@ -166,10 +164,8 @@ module random_mate_optim : list_ranking = {
                    (keep: *[n]bool)
                    (removed: *[n]i64)
                    (removed_offsets: *[]i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, *[]i64) =
-    -- originally in round
-    let sexes_vals = [#F : sex, #M]
     let sexes' =
-      tabulate m (\i -> sexes_vals[hash (i32.i64 i) % 2])
+      tabulate m (\i -> if hash (i32.i64 (i ^ t)) % 2 == 0 then #F else #M)
     let sexes' = scatter sexes active sexes'
     let update i =
       if S[i] == n
