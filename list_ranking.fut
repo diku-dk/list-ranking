@@ -49,20 +49,17 @@ module rand_i8 = uniform_int_distribution i8 u32 rng_engine
 module rand_i64 = uniform_int_distribution i64 u32 rng_engine
 module shuffle = mk_shuffle u64 xorshift128plus
 
-local
-def hash (x: i32) : i32 =
-  let x = u32.i32 x
-  let x = ((x >> 16) ^ x) * 0x45d9f3b
-  let x = ((x >> 16) ^ x) * 0x45d9f3b
-  let x = ((x >> 16) ^ x)
-  in i32.u32 x
+module random_mate_utils = {
+  def hash (x: i32) : i32 =
+    let x = u32.i32 x
+    let x = ((x >> 16) ^ x) * 0x45d9f3b
+    let x = ((x >> 16) ^ x) * 0x45d9f3b
+    let x = ((x >> 16) ^ x)
+    in i32.u32 x
 
--- Random Mate as described in 'List ranking and parallel tree contraction' by
--- M. Reid-Miller, G. L. Miller, and F. Modugno, although with adaptations to
--- the data parallel model.
-module random_mate : list_ranking = {
   type sex = #F | #M
 
+  #[inline]
   def bury_dead [k] [n]
                 (t: i64)
                 (dead: [k]i64)
@@ -75,6 +72,8 @@ module random_mate : list_ranking = {
     in (removed', removed_offsets')
 
   -- note we have m <= n
+
+  #[inline]
   def loop_body [n] [m]
                 (R: *[n]i32)
                 (S: *[n]i64)
@@ -114,6 +113,13 @@ module random_mate : list_ranking = {
     let (removed', removed_offsets') =
       bury_dead t dead removed removed_offsets
     in (R', S', t + 1i64, active', sexes', keep', removed', removed_offsets')
+}
+
+-- Random Mate as described in 'List ranking and parallel tree contraction' by
+-- M. Reid-Miller, G. L. Miller, and F. Modugno, although with adaptations to
+-- the data parallel model.
+module random_mate : list_ranking = {
+  open random_mate_utils
 
   def list_ranking [n] (S: [n]i64) : [n]i32 =
     let h = head S
@@ -141,57 +147,7 @@ module random_mate : list_ranking = {
 -- | A variant of Random Mate that shifts to using Wyllie's algorithm once a
 -- certain threshold has been reached.
 module random_mate_optim : list_ranking = {
-  type sex = #F | #M
-
-  def bury_dead [k] [n]
-                (t: i64)
-                (dead: [k]i64)
-                (removed: *[n]i64)
-                (removed_offsets: *[]i64) : (*[n]i64, *[]i64) =
-    let removed' =
-      scatter removed (tabulate k (+ removed_offsets[t - 1])) dead
-    let removed_offsets' =
-      removed_offsets with [t] = k + removed_offsets[t - 1]
-    in (removed', removed_offsets')
-
-  -- note we have m <= n
-  def og_loop_body [n] [m]
-                   (R: *[n]i32)
-                   (S: *[n]i64)
-                   (t: i64)
-                   (active: [m]i64)
-                   (sexes: *[n]sex)
-                   (keep: *[n]bool)
-                   (removed: *[n]i64)
-                   (removed_offsets: *[]i64) : (*[n]i32, *[n]i64, i64, []i64, *[n]sex, *[n]bool, *[n]i64, *[]i64) =
-    let sexes' =
-      tabulate m (\i -> if hash (i32.i64 (i ^ t)) % 2 == 0 then #F else #M)
-    let sexes' = scatter sexes active sexes'
-    let update i =
-      if S[i] == n
-      then -- no update, remove inactive element
-           (R[i], S[i], i)
-      else if sexes'[i] == #F && sexes'[S[i]] == #M
-      then ( R[i] + R[S[i]]
-           , S[S[i]]
-           , -- This might make dublicate indices in remove, but
-             -- this should be ok since we always want to insert
-             -- false in the scatter
-             S[i]
-           )
-      else -- nothing became inactive
-           (R[i], S[i], -1i64)
-    let (R', S', rm_idx) = unzip3 (map update active)
-    -- book keeping
-    let R' = scatter R active R'
-    let S' = scatter S active S'
-    let sexes' = scatter sexes' rm_idx (rep #M)
-    -- calc. new active cells
-    let keep' = scatter keep rm_idx (rep false)
-    let (active', dead) = copy (partition (\i -> keep'[i]) active)
-    -- Bury the dead (inactive cells) in the graveyard (removed)
-    let (removed', removed_offsets') = bury_dead t dead removed removed_offsets
-    in (R', S', t + 1i64, active', sexes', keep', removed', removed_offsets')
+  open random_mate_utils
 
   def modified_wyllie [n] [m] (R: *[n]i32) (S: *[n]i64) (active: [m]i64) : (*[n]i32, *[n]i64) =
     loop (R, S) for _i < 64 - i64.clz n do
@@ -218,7 +174,7 @@ module random_mate_optim : list_ranking = {
       loop (R, S, t, active, sexes, keep, removed, removed_offsets) =
              (R, copy S, 1i64, active, sexes, keep, removed, removed_offsets)
       while S[h] != n && length active > cut_off do
-        og_loop_body R S t active sexes keep removed removed_offsets
+        loop_body R S t active sexes keep removed removed_offsets
     --  might have to also get S post-wyllie
     let (R, S) = modified_wyllie R S active
     -- Reconstruction phase
