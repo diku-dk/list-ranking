@@ -3,6 +3,7 @@
 -- generation and testing.
 
 import "lib/github.com/diku-dk/cpprandom/random"
+import "lib/github.com/diku-dk/sorts/radix_sort"
 import "lib/github.com/diku-dk/cpprandom/shuffle"
 
 def head [n] (S: [n]i64) : i64 =
@@ -46,7 +47,7 @@ module wyllie : list_ranking = {
 
 module rng_engine = minstd_rand
 module rand_i8 = uniform_int_distribution i8 u32 rng_engine
-module rand_i64 = uniform_int_distribution i64 u32 rng_engine
+module rand_i32 = uniform_int_distribution i32 u32 rng_engine
 module shuffle = mk_shuffle u64 xorshift128plus
 
 module random_mate_utils = {
@@ -186,27 +187,22 @@ module random_mate_optim : list_ranking = {
          in (scatter R RA_now updateR)
 }
 
-entry random_list (n: i64) : [n]i64 =
+entry blocked_list (n: i64) (B: i64) =
   let seed = 13632
   let rng = rng_engine.rng_from_seed [seed]
-  let rng' = xorshift128plus.rng_from_seed [seed]
-  let (_, h) = rand_i64.rand (0i64, (n - 1)) rng
-  let (_, tmp) = shuffle.shuffle rng' (iota n)
+  let rngs = rng_engine.split_rng n rng
+  let keys =
+    map2 (\i rng ->
+            let x = i / B
+            let (_, y) = rand_i32.rand (0, i32.highest - 1) rng
+            in (u64.i64 x << 32) | (u64.i32 y))
+         (iota n)
+         rngs
+  let tmp = map (.1) (radix_sort_by_key (.0) u64.num_bits u64.get_bit (zip keys (iota n)))
   let (idx, S) = zip tmp (rotate 1 tmp) |> unzip
   let lst = scatter (replicate n 0) idx S
-  let lst[h] = n
+  let lst[n - 1] = n
   in lst
-
-entry strided_list (n: i64) (s: i64) =
-  let f i =
-    let next = i + s
-    let run = i % s + 1
-    in if next < n
-       then next
-       else if run < s
-       then run
-       else n
-  in tabulate n f
 
 def mk_test list_ranking S =
   let expected = wyllie.list_ranking S
@@ -215,28 +211,34 @@ def mk_test list_ranking S =
 
 -- ==
 -- entry: sequential_test random_mate_test random_mate_optim_test
--- "n=100000,s=1"     compiled nobench script input { strided_list 10000i64 1i64 }  output { true }
--- "n=100000,s=10"    compiled nobench script input { strided_list 10000i64 10i64 } output { true }
--- "n=100000,s=100"   compiled nobench script input { strided_list 10000i64 10i64 } output { true }
+-- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
+-- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
+-- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
 entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
 
 -- entry: sequential_bench
--- "n=10"      compiled notest no_cuda no_opencl no_hip script input { random_list 10i64 }
--- "n=100"     compiled notest no_cuda no_opencl no_hip script input { random_list 100i64 }
--- "n=1000"    compiled notest no_cuda no_opencl no_hip script input { random_list 1000i64 }
--- "n=10000"   compiled notest no_cuda no_opencl no_hip script input { random_list 10000i64 }
--- "n=100000"  compiled notest no_cuda no_opencl no_hip script input { random_list 100000i64 }
--- "n=1000000" compiled notest no_cuda no_opencl no_hip script input { random_list 1000000i64 }
+-- compiled notest script input { blocked_list 1000000i64 1i64 }
+-- compiled notest script input { blocked_list 1000000i64 10i64 }
+-- compiled notest script input { blocked_list 1000000i64 100i64 }
+-- compiled notest script input { blocked_list 1000000i64 1000i64 }
+-- compiled notest script input { blocked_list 1000000i64 10000i64 }
+-- compiled notest script input { blocked_list 1000000i64 100000i64 }
+-- compiled notest script input { blocked_list 1000000i64 1000000i64 }
 entry sequential_bench = sequential.list_ranking
 
 -- ==
 -- entry: wyllie_bench random_mate_bench random_mate_optim_bench
--- compiled notest script input { random_list  10000000i64 }
--- compiled notest script input { strided_list 10000000i64 1i64 }
--- compiled notest script input { strided_list 10000000i64 10i64 }
--- compiled notest script input { strided_list 10000000i64 100i64 }
+-- compiled notest script input { blocked_list 100000000i64 1i64 }
+-- compiled notest script input { blocked_list 100000000i64 10i64 }
+-- compiled notest script input { blocked_list 100000000i64 100i64 }
+-- compiled notest script input { blocked_list 100000000i64 1000i64 }
+-- compiled notest script input { blocked_list 100000000i64 10000i64 }
+-- compiled notest script input { blocked_list 100000000i64 100000i64 }
+-- compiled notest script input { blocked_list 100000000i64 1000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 10000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 100000000i64 }
 entry wyllie_bench = wyllie.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_optim_bench = random_mate_optim.list_ranking
