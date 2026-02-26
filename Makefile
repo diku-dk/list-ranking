@@ -3,5 +3,5 @@
 run: benchmark
 	./benchmark
 
-benchmark: benchmark.sml
+benchmark: tooling/benchmark.sml
 	mlkit -o $@ $<
