@@ -4,3 +4,8 @@ lib
 *.actual
 *.expected
 *.c
+
+# Tooling stuff
+benchmark
+MLB
+list_ranking.spec
