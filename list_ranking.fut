@@ -187,6 +187,21 @@ module random_mate_optim : list_ranking = {
          in (scatter R RA_now updateR)
 }
 
+-- | Anderson/Miller list ranking. Deterministic and work efficient.
+-- WIP
+module work_efficient : list_ranking = {
+  def splice_out [n] [m] (R: *[n]i64) (P: *[n]i64) (S: *[n]i64) (is: [m]i64) =
+    let f i =
+      if S[i] == n
+      then (R[i], S[i])
+      else (R[P[i]] + R[i], S[S[i]])
+    let (R', S') = unzip (map f is)
+    in (scatter R is R', scatter S is S')
+
+  def list_ranking [n] (S: [n]i64) : [n]i32 =
+    map i32.i64 S
+}
+
 entry blocked_list (n: i64) (B: i64) =
   let seed = 13632
   let rng = rng_engine.rng_from_seed [seed]
