@@ -198,6 +198,37 @@ module work_efficient : list_ranking = {
     let (R', S') = unzip (map f is)
     in (scatter R is R', scatter S is S')
 
+  type queues [m] [k] =
+    { top: [m]i64
+    , queue: [m][k]i64
+    , len: [m]i64
+    }
+
+  type status =
+      #active
+    | #ruler
+    | #subject
+    | #inactive
+
+  def increment_top [m] [n] [k]
+                    ({top, queue, len}: queues [m] [k])
+                    (pred: [n]i64)
+                    (statuses: *[n]status) =
+    let (top, vs) =
+      map2 (\t l ->
+              let t' = t + 1
+              let t' = if t' < l && pred[t'] == -1 then t' + 1 else t'
+              in if t' < l then (t', #active) else (t', statuses[t']))
+           top
+           len
+      |> unzip
+    in ({top, queue, len}, scatter statuses top vs)
+
+  def find_increasing_chains [m] [n] [k]
+                    ({top, queue, len}: queues [m] [k])
+                    (pred: [n]i64)
+                    (statuses: *[n]status) =
+    
   def list_ranking [n] (S: [n]i64) : [n]i32 =
     map i32.i64 S
 }
