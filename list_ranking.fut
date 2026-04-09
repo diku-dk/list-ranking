@@ -190,6 +190,8 @@ module random_mate_optim : list_ranking = {
 -- | Anderson/Miller list ranking. Deterministic and work efficient.
 -- WIP
 module work_efficient : list_ranking = {
+  def nil : i64 = -1
+
   def splice_out [n] [m] (R: *[n]i64) (P: *[n]i64) (S: *[n]i64) (is: [m]i64) =
     let f i =
       if S[i] == n
@@ -212,23 +214,88 @@ module work_efficient : list_ranking = {
 
   def increment_top [m] [n] [k]
                     ({top, queue, len}: queues [m] [k])
+                    (mask: [m]bool)
                     (pred: [n]i64)
                     (statuses: *[n]status) =
     let (top, vs) =
-      map2 (\t l ->
-              let t' = t + 1
-              let t' = if t' < l && pred[t'] == -1 then t' + 1 else t'
-              in if t' < l then (t', #active) else (t', statuses[t']))
+      map3 (\m t l ->
+              if not m
+              then (nil, #inactive)
+              else let t' = t + 1
+                   let t' = if t' < l && pred[t'] == nil then t' + 1 else t'
+                   in if t' < l then (t', #active) else (t', statuses[t']))
+           mask
            top
            len
       |> unzip
     in ({top, queue, len}, scatter statuses top vs)
 
+  def mask_indices [n] (mask: [n]bool) (is: [n]i64) : [n]i64 =
+    map2 (\f t -> if f then t else nil) mask is
+
   def find_increasing_chains [m] [n] [k]
-                    ({top, queue, len}: queues [m] [k])
-                    (pred: [n]i64)
-                    (statuses: *[n]status) =
-    
+                             ({top, queue = _, len}: queues [m] [k])
+                             (mask: [m]bool)
+                             (pred: [n]i64)
+                             (succ: [n]i64)
+                             (inchain: *[n]bool)
+                             (next: *[n]i64)
+                             (covered: *[n]bool) =
+    let is = mask_indices mask top
+    let inchain = scatter inchain is (rep true)
+    let next = scatter next is (rep nil)
+    let covered = scatter covered is (rep false)
+    let (ts, is, js, vs) =
+      map2 (\m t ->
+              if m || (succ[t] == nil && not inchain[succ[t]])
+              then (nil, nil, nil, nil)
+              else if len[t] <= len[succ[t]]
+              then (t, t, succ[t], succ[t])
+              else if not (covered[t] || covered[pred[t]])
+              then (t, nil, nil, pred[t])
+              else (nil, nil, nil, nil))
+           mask
+           top
+      |> unzip4
+    let next = scatter next ts vs
+    let covered = scatter covered (is ++ js) (rep true)
+    in (next, covered)
+
+  def predecessor [n] (succ: [n]i64) : [n]i64 =
+    scatter (rep nil) succ (iota n)
+
+  def is_ruler [n] (color: [n]i64) (pred: [n]i64) (succ: [n]i64) =
+    map3 (\c p s ->
+            p == nil
+            || (s != nil && color[p] > c && c < color[s]))
+         color
+         pred
+         succ
+
+  def first_bit_difference (a: u64) (b: u64) : i32 =
+    if a == b
+    then -1
+    else u64.num_bits - u64.clz (a u64.^ b)
+
+  def ceil_log2 x = i64.num_bits - i64.clz (x - 1)
+
+  def floor_log2 x = (i64.num_bits - 1) - i64.clz x
+
+  def next_coloring [n] (color: [n]u64) (pred: [n]i64) (m: i64) : [n]u64 =
+    map2 (\c p ->
+            if p == nil
+            then 0
+            else let i = first_bit_difference color[p] c
+                 let v = u64.get_bit i c
+                 in if i == -1
+                    then c
+                    else u64.((i32 v << (i32 (ceil_log2 m) + 1)) | (i32 i)))
+         color
+         pred
+
+  def init_coloring (n: i64) (m: i64) : *[n]u64 =
+    tabulate n ((/ u64.i64 m) <-< u64.i64)
+
   def list_ranking [n] (S: [n]i64) : [n]i32 =
     map i32.i64 S
 }
