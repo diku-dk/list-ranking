@@ -189,112 +189,91 @@ module random_mate_optim : list_ranking = {
 
 -- | Anderson/Miller list ranking. Deterministic and work efficient.
 -- WIP
-module work_efficient : list_ranking = {
-  def nil : i64 = -1
-
-  def splice_out [n] [m] (R: *[n]i64) (P: *[n]i64) (S: *[n]i64) (is: [m]i64) =
-    let f i =
-      if S[i] == n
-      then (R[i], S[i])
-      else (R[P[i]] + R[i], S[S[i]])
-    let (R', S') = unzip (map f is)
-    in (scatter R is R', scatter S is S')
-
-  type queues [m] [k] =
-    { top: [m]i64
-    , queue: [m][k]i64
-    , len: [m]i64
-    }
-
-  type status =
-      #active
-    | #ruler
-    | #subject
-    | #inactive
-
-  def increment_top [m] [n] [k]
-                    ({top, queue, len}: queues [m] [k])
-                    (mask: [m]bool)
-                    (pred: [n]i64)
-                    (statuses: *[n]status) =
-    let (top, vs) =
-      map3 (\m t l ->
-              if not m
-              then (nil, #inactive)
-              else let t' = t + 1
-                   let t' = if t' < l && pred[t'] == nil then t' + 1 else t'
-                   in if t' < l then (t', #active) else (t', statuses[t']))
-           mask
-           top
-           len
-      |> unzip
-    in ({top, queue, len}, scatter statuses top vs)
-
-  def mask_indices [n] (mask: [n]bool) (is: [n]i64) : [n]i64 =
-    map2 (\f t -> if f then t else nil) mask is
-
-  def find_increasing_chains [m] [n] [k]
-                             ({top, queue = _, len}: queues [m] [k])
-                             (mask: [m]bool)
-                             (pred: [n]i64)
-                             (succ: [n]i64)
-                             (inchain: *[n]bool)
-                             (next: *[n]i64)
-                             (covered: *[n]bool) =
-    let is = mask_indices mask top
-    let inchain = scatter inchain is (rep true)
-    let next = scatter next is (rep nil)
-    let covered = scatter covered is (rep false)
-    let (ts, is, js, vs) =
-      map2 (\m t ->
-              if m || (succ[t] == nil && not inchain[succ[t]])
-              then (nil, nil, nil, nil)
-              else if len[t] <= len[succ[t]]
-              then (t, t, succ[t], succ[t])
-              else if not (covered[t] || covered[pred[t]])
-              then (t, nil, nil, pred[t])
-              else (nil, nil, nil, nil))
-           mask
-           top
-      |> unzip4
-    let next = scatter next ts vs
-    let covered = scatter covered (is ++ js) (rep true)
-    in (next, covered)
-
-  def predecessor [n] (succ: [n]i64) : [n]i64 =
-    scatter (rep nil) succ (iota n)
-
-  def is_ruler [n] (color: [n]i64) (pred: [n]i64) (succ: [n]i64) =
-    map3 (\c p s ->
-            p == nil
-            || (s != nil && color[p] > c && c < color[s]))
-         color
-         pred
-         succ
-
-  def first_bit_difference (a: u64) (b: u64) : i32 =
+module work_efficient_suboptimal : list_ranking = {
+  def lsb_diff (a: i64) (b: i64) : i8 =
     if a == b
     then -1
-    else u64.num_bits - u64.clz (a u64.^ b)
+    else a ^ b |> i64.ctz |> i8.i32
 
-  def ceil_log2 x = i64.num_bits - i64.clz (x - 1)
+  def ceil_log2 x = i64.num_bits - i64.ctz (x - 1)
 
   def floor_log2 x = (i64.num_bits - 1) - i64.clz x
 
-  def next_coloring [n] (color: [n]u64) (pred: [n]i64) (m: i64) : [n]u64 =
-    map2 (\c p ->
-            if p == nil
-            then 0
-            else let i = first_bit_difference color[p] c
-                 let v = u64.get_bit i c
-                 in if i == -1
-                    then c
-                    else u64.((i32 v << (i32 (ceil_log2 m) + 1)) | (i32 i)))
-         color
-         pred
+  def predecessor [n] (succ: [n]i64) : [n]i64 =
+    scatter (rep (-1)) succ (iota n)
 
-  def init_coloring (n: i64) (m: i64) : *[n]u64 =
-    tabulate n ((/ u64.i64 m) <-< u64.i64)
+  def init_color (n: i64) : [n]i64 = iota n
+
+  def logn_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
+    tabulate n (\i -> lsb_diff color[i] color[succ[i]])
+
+  def bit (v: i64) (b: i8) : i8 =
+    i8.i64 ((v >> i64.i8 b) & 1)
+
+  def ruling_set [n] (succ: [n]i64) : [n]bool =
+    let pred = predecessor succ
+    let color0 = init_color n
+    let color1 = logn_coloring color0 succ
+    let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
+    let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
+    let selected =
+      tabulate n (\i ->
+                    let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
+                    let coin = bit color0[i] color1[i]
+                    in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
+    let available =
+      tabulate n (\i ->
+                    not selected[i]
+                    && not selected[pred[i]]
+                    && not selected[succ[i]]
+                    && is_local_max[i])
+    let selected' =
+      tabulate n (\i ->
+                    let neighbor_is_available = available[pred[i]] || available[succ[i]]
+                    let coin = bit color0[i] color1[i]
+                    in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
+    in selected'
+
+  def verify_ring_cycles [n] (succ: [n]i64) : bool =
+    let starts = iota n
+    let returned =
+      map (\start ->
+             loop v = start for _i < n do succ[v])
+          starts
+    in and (map2 (==) returned starts)
+
+  def verify_ring_inverse [n] (succ: [n]i64) (pred: [n]i64) : bool =
+    let succ_of_pred = map (\i -> succ[pred[i]]) (iota n)
+    let pred_of_succ = map (\i -> pred[succ[i]]) (iota n)
+    let check1 = and (map2 (==) succ_of_pred (iota n))
+    let check2 = and (map2 (==) pred_of_succ (iota n))
+    in check1 && check2
+
+  def verify_ring [n] (succ: [n]i64) (pred: [n]i64) : bool =
+    verify_ring_cycles succ
+    && verify_ring_inverse succ pred
+
+  def verify_no_adjacent_rulers [n] (succ: [n]i64) (selected: [n]bool) : bool =
+    let checks = map (\i -> if selected[i] then not selected[succ[i]] else true) (iota n)
+    in and checks
+
+  def verify_within_logn [n] (succ: [n]i64) (selected: [n]bool) : bool =
+    let max_steps = ceil_log2 n
+    let all_close =
+      map (\start ->
+             let (_, found) =
+               loop (v, found) = (start, selected[start])
+               for _step < max_steps do
+                 if found
+                 then (v, found)
+                 else (succ[v], selected[succ[v]])
+             in found)
+          (iota n)
+    in and all_close
+
+  def verify_ruling_set [n] (succ: [n]i64) (selected: [n]bool) : bool =
+    verify_no_adjacent_rulers succ selected
+    && verify_within_logn succ selected
 
   def list_ranking [n] (S: [n]i64) : [n]i32 =
     map i32.i64 S
