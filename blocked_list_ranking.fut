@@ -1,8 +1,11 @@
+local
 def ceil_log2 x = i64.num_bits - i64.clz (x - 1)
 
+local
 def gather [n] [m] (as: [n]i64) (is: [m]i64) : [m]i64 =
   map (\i -> if i == -1 then -1 else as[i]) is
 
+local
 def step [n] (rank: [n]i32) (succ: [n]i64) =
   let f i =
     if succ[i] == -1
@@ -10,13 +13,14 @@ def step [n] (rank: [n]i32) (succ: [n]i64) =
     else (rank[i] + rank[succ[i]], succ[succ[i]])
   in unzip (tabulate n f)
 
+local
 def wyllie [n] (rank: [n]i32) (succ: [n]i64) : [n]i32 =
   let (rank, _) =
     loop (rank, succ) for _i < i64.num_bits - i64.clz n do
       step rank succ
   in rank
 
-def list_ranking [n] (m: i64) (selected: [n]bool) (succ: [n]i64) : [n]i32 =
+def blocked_list_ranking [n] (m: i64) (selected: [n]bool) (succ: [n]i64) : [n]i32 =
   let active_before =
     zip selected (iota n)
     |> filter (.0)
