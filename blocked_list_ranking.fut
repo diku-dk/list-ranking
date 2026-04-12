@@ -32,7 +32,7 @@ def blocked_list_ranking [n] (m: i32) (selected: [n]bool) (succ: [n]i64) : [n]i3
   let active = gather nil succ active_before
   let (active_after, active_rank) =
     loop (active, active_rank)
-    for _i < 1 + m do
+    for _i < m do
       let (active, active_rank) =
         map2 (\r a ->
                 if a == nil || selected[a]
@@ -51,12 +51,12 @@ def blocked_list_ranking [n] (m: i32) (selected: [n]bool) (succ: [n]i64) : [n]i3
             (gather nil temp active_before)
             active_rank
   let ruler_rank = wyllie n ruler_rank ruler_list
-  let rank = scatter rank active_before (map (+ (-1)) ruler_rank)
+  let rank = scatter rank active_before ruler_rank
   let active_rank = ruler_rank
   let active = gather n succ active_before
   let (rank, _, _) =
     loop (rank, active, active_rank)
-    for _i < 1 + m do
+    for _i < m do
       let (active, active_rank) =
         map2 (\r a ->
                 if a == nil || selected[a]
@@ -65,7 +65,7 @@ def blocked_list_ranking [n] (m: i32) (selected: [n]bool) (succ: [n]i64) : [n]i3
              active_rank
              active
         |> unzip
-      let rank = scatter rank active (map (+ (-1)) active_rank)
+      let rank = scatter rank active active_rank
       let active = gather nil succ active
       in (rank, active, active_rank)
   in rank
