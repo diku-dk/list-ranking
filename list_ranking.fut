@@ -2,6 +2,7 @@
 -- including the random mate and sequential implementations, as well as input
 -- generation and testing.
 
+import "blocked_list_ranking"
 import "lib/github.com/diku-dk/cpprandom/random"
 import "lib/github.com/diku-dk/sorts/radix_sort"
 import "lib/github.com/diku-dk/cpprandom/shuffle"
@@ -187,13 +188,9 @@ module random_mate_optim : list_ranking = {
          in (scatter R RA_now updateR)
 }
 
-def ceil_log2 x = i64.num_bits - i64.clz (x - 1)
-
-def floor_log2 x = (i64.num_bits - 1) - i64.clz x
-
--- | Anderson/Miller list ranking. Deterministic and work efficient.
--- WIP
-module work_efficient_suboptimal : list_ranking = {
+-- | Anderson/Miller list ranking. Deterministic and work efficient
+-- but suboptimal implementation at this moment.
+module work_efficient_suboptim : list_ranking = {
   def lsb_diff (a: i64) (b: i64) : i8 =
     if a == b
     then -1
@@ -221,15 +218,16 @@ module work_efficient_suboptimal : list_ranking = {
       else (x, i)
     in (reduce_comm op (false, -1) (zip (map p as) (iota n))).1
 
+  def ceil_log2 x = i64.num_bits - i64.clz (x - 1)
+
   def ruling_set [n] (succ: [n]i64) : (i64, [n]bool) =
     let pred = predecessor succ
-    let l = succ[find_index (== n) succ]
+    let l_idx = find_index (== n) succ
     let h_idx = find_index (== n) pred
-    let h = pred[h_idx]
+    let succ = copy succ with [l_idx] = h_idx
+    let pred = copy pred with [h_idx] = l_idx
     let color0 = init_color n
     let color1 = logn_coloring color0 succ
-    let succ = copy succ with [h] = l
-    let pred = copy pred with [l] = h
     let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
     let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
     let selected =
@@ -250,111 +248,13 @@ module work_efficient_suboptimal : list_ranking = {
                     in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
     in (h_idx, selected')
 
-  def gather 'a [n] [m] (as: [n]a) (is: [m]i64) : [m]a =
-    map (\i -> as[i]) is
-
-  def step [n] (rank: [n]i32) (succ: [n]i64) =
-    let f i =
-      if succ[i] == n
-      then (rank[i], succ[i])
-      else (rank[i] + rank[succ[i]], succ[succ[i]])
-    in unzip (tabulate n f)
-
-  def wyllie [n] (rank: [n]i32) (succ: [n]i64) : [n]i32 =
-    let (R, _) =
-      loop (rank, succ) for _i < 64 - i64.clz n do
-        step rank succ
-    in rank
-
   def list_ranking [n] (succ: [n]i64) : [n]i32 =
-    let (h_idx, selected) = ruling_set succ
-    let selected =
-      map2 (\i s -> i == h_idx || s) (iota n) selected
-    let active_before =
-      zip selected (iota n)
-      |> filter (.0)
-      |> map (.1)
-    let temp = scatter (replicate n n) active_before (indices active_before)
-    let rank = rep 0
-    let active_rank = map (const 0) active_before
-    let (rank, active_after, active_rank) =
-      loop (rank, active, active_rank) = (rank, active_before, active_rank)
-      for i < ceil_log2 n do
-        let (active, active_rank) =
-          map2 (\r a ->
-                  if a == n || selected[a]
-                  then (a, r)
-                  else (succ[a], r + 1))
-               active_rank
-               active
-          |> unzip
-        let rank = scatter rank active active_rank
-        in (rank, active, active_rank)
-    let ruler_list =
-      scatter (map (const n) (indices active_after))
-              (gather temp active_before)
-              (gather temp active_after)
-    let ruler_rank =
-      scatter (map (const 0) active_after)
-              (gather temp active_after)
-              active_rank
-    let ruler_rank = wyllie ruler_rank ruler_list
-    let (rank, _) =
-      loop (rank, active) = (rank, active_after)
-      for i < ceil_log2 n do
-        let (active, active_rank) =
-          map2 (\r a ->
-                  if a == n || selected[a] && i != 0
-                  then (-1, 0)
-                  else (succ[a], rank[a] + r))
-               ruler_rank
-               active
-          |> unzip
-        let rank = scatter rank active active_rank
-        in (rank, active)
-    in rank
+    if n == 0
+    then [] :> [n]i32
+    else let (h_idx, selected) = ruling_set succ
+         let selected = map2 (\i s -> i == h_idx || s) (iota n) selected
+         in blocked_list_ranking (ceil_log2 n) selected succ
 }
-
-def verify_ring_cycles [n] (succ: [n]i64) : bool =
-  let starts = iota n
-  let returned =
-    map (\start ->
-           loop v = start for _i < n do succ[v])
-        starts
-  in and (map2 (==) returned starts)
-
-def verify_ring_inverse [n] (succ: [n]i64) (pred: [n]i64) : bool =
-  let succ_of_pred = map (\i -> succ[pred[i]]) (iota n)
-  let pred_of_succ = map (\i -> pred[succ[i]]) (iota n)
-  let check1 = and (map2 (==) succ_of_pred (iota n))
-  let check2 = and (map2 (==) pred_of_succ (iota n))
-  in check1 && check2
-
-def verify_ring [n] (succ: [n]i64) (pred: [n]i64) : bool =
-  verify_ring_cycles succ
-  && verify_ring_inverse succ pred
-
-def verify_no_adjacent_rulers [n] (succ: [n]i64) (selected: [n]bool) : bool =
-  let checks = map (\i -> if selected[i] then not selected[succ[i]] else true) (iota n)
-  in and checks
-
-def verify_within_logn [n] (succ: [n]i64) (selected: [n]bool) : bool =
-  let max_steps = ceil_log2 n
-  let all_close =
-    map (\start ->
-           let (_, found) =
-             loop (v, found) = (start, selected[start])
-             for _step < max_steps do
-               if found
-               then (v, found)
-               else (succ[v], selected[succ[v]])
-           in found)
-        (iota n)
-  in and all_close
-
-def verify_ruling_set [n] (succ: [n]i64) (selected: [n]bool) : bool =
-  verify_no_adjacent_rulers succ selected
-  && verify_within_logn succ selected
 
 entry blocked_list (n: i64) (B: i64) =
   let seed = 13632
@@ -379,13 +279,14 @@ def mk_test list_ranking S =
   in and (map2 (==) expected res)
 
 -- ==
--- entry: sequential_test random_mate_test random_mate_optim_test
+-- entry: sequential_test random_mate_test random_mate_optim_test work_efficient_suboptim_test
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
 entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
+entry work_efficient_suboptim_test = mk_test work_efficient_suboptim.list_ranking
 
 -- entry: sequential_bench
 -- compiled notest script input { blocked_list 1000000i64 1i64 }
