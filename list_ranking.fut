@@ -190,7 +190,7 @@ module random_mate_optim : list_ranking = {
 
 -- | Anderson/Miller list ranking. Deterministic and work efficient
 -- but suboptimal implementation at this moment.
-module work_efficient_suboptim : list_ranking = {
+module work_efficient : list_ranking = {
   def lsb_diff (a: i64) (b: i64) : i8 =
     if a == b
     then -1
@@ -279,14 +279,14 @@ def mk_test list_ranking S =
   in and (map2 (==) expected res)
 
 -- ==
--- entry: sequential_test random_mate_test random_mate_optim_test work_efficient_suboptim_test
+-- entry: sequential_test random_mate_test random_mate_optim_test work_efficient_test
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
 entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
-entry work_efficient_suboptim_test = mk_test work_efficient_suboptim.list_ranking
+entry work_efficient_test = mk_test work_efficient.list_ranking
 
 -- entry: sequential_bench
 -- compiled notest script input { blocked_list 1000000i64 1i64 }
@@ -299,7 +299,7 @@ entry work_efficient_suboptim_test = mk_test work_efficient_suboptim.list_rankin
 entry sequential_bench = sequential.list_ranking
 
 -- ==
--- entry: wyllie_bench random_mate_bench random_mate_optim_bench
+-- entry: wyllie_bench random_mate_bench random_mate_optim_bench work_efficient_bench
 -- compiled notest script input { blocked_list 100000000i64 1i64 }
 -- compiled notest script input { blocked_list 100000000i64 10i64 }
 -- compiled notest script input { blocked_list 100000000i64 100i64 }
@@ -312,6 +312,7 @@ entry sequential_bench = sequential.list_ranking
 entry wyllie_bench = wyllie.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_optim_bench = random_mate_optim.list_ranking
+entry work_efficient_bench = work_efficient.list_ranking
 
 entry average_stride [n] (S: [n]i64) =
   map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
