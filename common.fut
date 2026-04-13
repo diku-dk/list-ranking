@@ -5,7 +5,7 @@ def nil : i64 = -1
 
 -- | Ceiled integer log2.
 def ceil_log2 (a: i64) : i64 =
-  i64.i32 (i64.num_bits - i64.ctz (a - 1))
+  i64.i32 (i64.num_bits - i64.clz (a - 1))
 
 -- | Floored integer log2.
 def floor_log2 (a: i64) : i64 =
