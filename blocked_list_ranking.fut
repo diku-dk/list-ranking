@@ -68,7 +68,7 @@ def blocked_list_ranking [n] (m: i64) (selected: [n]bool) (succ: [n]i64) : [n]i3
       in (rank, active, active_rank)
   in rank
 
-entry blocked_list_ranking_filter [n] (selected: [n]bool) (succ: [n]i64) : [n]i32 =
+def blocked_list_ranking_filter [n] (selected: [n]bool) (succ: [n]i64) : [n]i32 =
   let active_before =
     zip selected (iota n)
     |> filter (.0)
@@ -106,7 +106,7 @@ entry blocked_list_ranking_filter [n] (selected: [n]bool) (succ: [n]i64) : [n]i3
             (gather temp active_before)
             active_rank
   let ruler_rank = wyllie ruler_rank ruler_list
-  let rank = #[trace] scatter rank active_before ruler_rank
+  let rank = scatter rank active_before ruler_rank
   let queue = zip (gather succ active_before) ruler_rank
   let (rank, _) =
     loop (rank, queue)
