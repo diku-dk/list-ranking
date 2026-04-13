@@ -13,15 +13,15 @@ def head [n] (S: [n]i64) : i64 =
 def ilog2 (x: i64) = 63 - i64.i32 (i64.clz x)
 
 module type list_ranking = {
-  val list_ranking [n] : (S: [n]i64) -> [n]i32
+  val list_ranking [n] : (h: i64) -> (S: [n]i64) -> [n]i32
 }
 
 -- | Sequential reference implementation. Do not run this with the GPU backends,
 -- as it will be monstrously slow.
 module sequential : list_ranking = {
-  def list_ranking [n] (S: [n]i64) =
+  def list_ranking [n] (h: i64) (S: [n]i64) =
     let (_, ranks) =
-      loop (i, ranks) = (head S, (replicate n (i32.i64 n)))
+      loop (i, ranks) = (h, (replicate n (i32.i64 n)))
       while S[i] != n do
         let j = S[i]
         let ranks[j] = ranks[i] - 1
@@ -38,7 +38,7 @@ module wyllie : list_ranking = {
       else (R[i] + R[S[i]], S[S[i]])
     in unzip (tabulate n f)
 
-  def list_ranking [n] (S: [n]i64) : [n]i32 =
+  def list_ranking [n] (_: i64) (S: [n]i64) : [n]i32 =
     let R = replicate n 1
     let (R, _) =
       loop (R, S) for _i < 64 - i64.clz n do
@@ -123,8 +123,7 @@ module random_mate_utils = {
 module random_mate : list_ranking = {
   open random_mate_utils
 
-  def list_ranking [n] (S: [n]i64) : [n]i32 =
-    let h = head S
+  def list_ranking [n] (h: i64) (S: [n]i64) : [n]i32 =
     let R = replicate n 1i32
     let sexes = replicate n #M
     let active = iota n
@@ -162,8 +161,7 @@ module random_mate_optim : list_ranking = {
       -- put our step
       in (scatter R active R', scatter S active S')
 
-  def list_ranking [n] (S: [n]i64) : ([n]i32) =
-    let h = head S
+  def list_ranking [n] (h: i64) (S: [n]i64) : ([n]i32) =
     let R = replicate n 1i32
     let sexes = replicate n #M
     let active = iota n
@@ -220,12 +218,11 @@ module work_efficient : list_ranking = {
 
   def ceil_log2 x = i64.num_bits - i64.clz (x - 1)
 
-  def ruling_set [n] (succ: [n]i64) : (i64, [n]bool) =
+  def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
     let pred = predecessor succ
-    let l_idx = find_index (== n) succ
-    let h_idx = find_index (== n) pred
-    let succ = copy succ with [l_idx] = h_idx
-    let pred = copy pred with [h_idx] = l_idx
+    let l = find_index (== n) succ
+    let succ = copy succ with [l] = h
+    let pred = copy pred with [h] = l
     let color0 = init_color n
     let color1 = logn_coloring color0 succ
     let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
@@ -246,13 +243,13 @@ module work_efficient : list_ranking = {
                     let neighbor_is_available = available[pred[i]] || available[succ[i]]
                     let coin = bit color0[i] color1[i]
                     in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
-    in (h_idx, selected')
+    in selected'
 
-  def list_ranking [n] (succ: [n]i64) : [n]i32 =
+  def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
     if n == 0
     then [] :> [n]i32
-    else let (h_idx, selected) = ruling_set succ
-         let selected = map2 (\i s -> i == h_idx || s) (iota n) selected
+    else let selected = ruling_set h succ
+         let selected = map2 (\i s -> i == h || s) (iota n) selected
          in blocked_list_ranking (ceil_log2 n) selected succ
 }
 
@@ -271,11 +268,12 @@ entry blocked_list (n: i64) (B: i64) =
   let (idx, S) = zip tmp (rotate 1 tmp) |> unzip
   let lst = scatter (replicate n 0) idx S
   let lst[n - 1] = n
-  in lst
+  let h = head lst
+  in (h, lst)
 
-def mk_test list_ranking S =
-  let expected = wyllie.list_ranking S
-  let res = list_ranking S
+def mk_test list_ranking h S =
+  let expected = wyllie.list_ranking h S
+  let res = list_ranking h S
   in and (map2 (==) expected res)
 
 -- ==
