@@ -228,7 +228,54 @@ module work_efficient : list_ranking = {
     then [] :> [n]i32
     else let selected = ruling_set h succ
          let selected = map2 (\i s -> i == h || s) (iota n) selected
-         in blocked_list_ranking_filtering (ceil_log2 n) selected succ
+         in blocked_list_ranking (ceil_log2 n) selected succ
+}
+
+module work_efficient_filter : list_ranking = {
+  def lsb_diff (a: i64) (b: i64) : i8 =
+    if a == b
+    then -1
+    else a ^ b |> i64.ctz |> i8.i32
+
+  def init_color (n: i64) : [n]i64 = iota n
+
+  def logn_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
+    tabulate n (\i -> lsb_diff color[i] color[succ[i]])
+
+  def bit (v: i64) (b: i8) : i8 =
+    i8.i64 ((v >> i64.i8 b) & 1)
+
+  def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+    let l = end succ
+    let succ = copy succ with [l] = h
+    let color0 = init_color n
+    let color1 = logn_coloring color0 succ
+    let is_local_min = tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
+    let is_local_max = tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
+    let selected =
+      tabulate n (\i ->
+                    let neighbor_is_local_min = is_local_min[i] || is_local_min[succ[succ[i]]]
+                    let coin = bit color0[succ[i]] color1[succ[i]]
+                    in is_local_min[succ[i]] && ((not neighbor_is_local_min) || coin == 1))
+    let available =
+      tabulate n (\i ->
+                    not selected[succ[i]]
+                    && not selected[i]
+                    && not selected[succ[succ[i]]]
+                    && is_local_max[succ[i]])
+    let selected' =
+      tabulate n (\i ->
+                    let neighbor_is_available = available[i] || available[succ[succ[i]]]
+                    let coin = bit color0[succ[i]] color1[succ[i]]
+                    in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
+    in selected'
+
+  def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
+    if n == 0
+    then [] :> [n]i32
+    else let selected = ruling_set h succ
+         let selected = map2 (\i s -> i == h || s) (iota n) selected
+         in blocked_list_ranking_filter selected succ
 }
 
 entry blocked_list (n: i64) (B: i64) =
@@ -255,7 +302,7 @@ def mk_test list_ranking h S =
   in and (map2 (==) expected res)
 
 -- ==
--- entry: sequential_test random_mate_test random_mate_optim_test work_efficient_test
+-- entry: sequential_test random_mate_test random_mate_optim_test work_efficient_test work_efficient_filter_test
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
@@ -263,6 +310,7 @@ entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
 entry work_efficient_test = mk_test work_efficient.list_ranking
+entry work_efficient_filter_test = mk_test work_efficient_filter.list_ranking
 
 -- entry: sequential_bench
 -- compiled notest script input { blocked_list 1000000i64 1i64 }
@@ -275,7 +323,7 @@ entry work_efficient_test = mk_test work_efficient.list_ranking
 entry sequential_bench = sequential.list_ranking
 
 -- ==
--- entry: wyllie_bench random_mate_bench random_mate_optim_bench work_efficient_bench
+-- entry: wyllie_bench random_mate_bench random_mate_optim_bench work_efficient_bench work_efficient_filter_bench
 -- compiled notest script input { blocked_list 100000000i64 1i64 }
 -- compiled notest script input { blocked_list 100000000i64 10i64 }
 -- compiled notest script input { blocked_list 100000000i64 100i64 }
@@ -289,6 +337,7 @@ entry wyllie_bench = wyllie.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_optim_bench = random_mate_optim.list_ranking
 entry work_efficient_bench = work_efficient.list_ranking
+entry work_efficient_filter_bench = work_efficient_filter.list_ranking
 
 entry average_stride [n] (S: [n]i64) =
   map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S

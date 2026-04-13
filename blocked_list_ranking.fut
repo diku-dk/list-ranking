@@ -68,7 +68,7 @@ def blocked_list_ranking [n] (m: i64) (selected: [n]bool) (succ: [n]i64) : [n]i3
       in (rank, active, active_rank)
   in rank
 
-entry blocked_list_ranking_filtering [n] (m: i64) (selected: [n]bool) (succ: [n]i64) : [n]i32 =
+entry blocked_list_ranking_filter [n] (selected: [n]bool) (succ: [n]i64) : [n]i32 =
   let active_before =
     zip selected (iota n)
     |> filter (.0)
@@ -106,21 +106,24 @@ entry blocked_list_ranking_filtering [n] (m: i64) (selected: [n]bool) (succ: [n]
             (gather temp active_before)
             active_rank
   let ruler_rank = wyllie ruler_rank ruler_list
-  let rank = scatter rank active_before ruler_rank
-  let active_rank = ruler_rank
-  let active = gather succ active_before
-  let (rank, _, _) =
-    loop (rank, active, active_rank)
-    for _i < m do
-      let (active, active_rank) =
-        map2 (\r a ->
-                if a == nil || selected[a]
-                then (nil, r)
-                else (a, r - 1))
-             active_rank
-             active
-        |> unzip
+  let rank = #[trace] scatter rank active_before ruler_rank
+  let queue = zip (gather succ active_before) ruler_rank
+  let (rank, _) =
+    loop (rank, queue)
+    while not (null queue) do
+      let flags =
+        map (\(a, _r) -> not (a == nil || selected[a])) queue
+      let offsets = scan (+) 0 (map i64.bool flags)
+      let is = map2 (\f o -> if f then o - 1 else -1) flags offsets
+      let count =
+        scatter [0]
+                (map (\j -> if j == length queue - 1 then 0 else -1) (indices queue))
+                offsets
+      let queue = map2 (\f (a, r) -> if f then (a, r - 1) else (nil, 0)) flags queue
+      let (active, active_rank) = unzip queue
       let rank = scatter rank active active_rank
-      let active = gather succ active
-      in (rank, active, active_rank)
+      let queue =
+        map (\(a, r) -> if a == nil then (a, r) else (succ[a], r)) queue
+        |> scatter (map (const (nil, 0)) queue) is
+      in (rank, queue[:count[0]])
   in rank
