@@ -228,7 +228,7 @@ module work_efficient : list_ranking = {
     then [] :> [n]i32
     else let selected = ruling_set h succ
          let selected = map2 (\i s -> i == h || s) (iota n) selected
-         in blocked_list_ranking (ceil_log2 n) selected succ
+         in blocked_list_ranking_filtering (ceil_log2 n) selected succ
 }
 
 entry blocked_list (n: i64) (B: i64) =

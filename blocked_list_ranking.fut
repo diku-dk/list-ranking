@@ -76,24 +76,25 @@ entry blocked_list_ranking_filtering [n] (m: i64) (selected: [n]bool) (succ: [n]
   let temp = scatter (replicate n nil) active_before (indices active_before)
   let rank = rep 0
   let active_rank = map (const 1) active_before
-  let queue = zip3 (map (const 0) active_before) (map (const 0) active_before) (indices active_before)
   let active = copy (gather succ active_before)
+  let queue = zip3 active (map (const 1) active_before) (indices active_before)
   let (active_after, active_rank, _) =
     loop (active, active_rank, queue)
     while not (null queue) do
-      let flags = map (\(a, _r, _i) -> a != nil && not selected[a]) queue
+      let flags =
+        map (\(a, _r, _i) -> not (a == nil || selected[a])) queue
       let offsets = scan (+) 0 (map i64.bool flags)
       let is = map2 (\f o -> if f then o - 1 else -1) flags offsets
-      let count =
-        scatter [0]
-                (map (\j -> if j == n - 1 then 0 else -1) (indices queue))
-                offsets
       let js =
         map2 (\f (_a, _r, i) -> if f then -1 else i) flags queue
+      let count =
+        scatter [0]
+                (map (\j -> if j == length queue - 1 then 0 else -1) (indices queue))
+                offsets
       let active = scatter active js (map (.0) queue)
       let active_rank = scatter active_rank js (map (.1) queue)
       let queue =
-        map2 (\j (a, r, i) -> if j != -1 then (succ[a], r + 1, i) else (a, r, i)) is queue
+        map2 (\f (a, r, i) -> if f then (succ[a], r + 1, i) else (a, r, i)) flags queue
         |> scatter (map (const (0, 0, 0)) queue) is
       in (active, active_rank, queue[:count[0]])
   let ruler_list =
