@@ -3,14 +3,10 @@
 -- generation and testing.
 
 import "blocked_list_ranking"
+import "common"
 import "lib/github.com/diku-dk/cpprandom/random"
 import "lib/github.com/diku-dk/sorts/radix_sort"
 import "lib/github.com/diku-dk/cpprandom/shuffle"
-
-def head [n] (S: [n]i64) : i64 =
-  i64.sum (scatter (iota n) S (replicate n 0))
-
-def ilog2 (x: i64) = 63 - i64.i32 (i64.clz x)
 
 module type list_ranking = {
   val list_ranking [n] : (h: i64) -> (S: [n]i64) -> [n]i32
@@ -22,7 +18,7 @@ module sequential : list_ranking = {
   def list_ranking [n] (h: i64) (S: [n]i64) =
     let (_, ranks) =
       loop (i, ranks) = (h, (replicate n (i32.i64 n)))
-      while S[i] != n do
+      while S[i] != nil do
         let j = S[i]
         let ranks[j] = ranks[i] - 1
         in (j, ranks)
@@ -33,7 +29,7 @@ module sequential : list_ranking = {
 module wyllie : list_ranking = {
   def step [n] (R: [n]i32) (S: [n]i64) =
     let f i =
-      if S[i] == n
+      if S[i] == nil
       then (R[i], S[i])
       else (R[i] + R[S[i]], S[S[i]])
     in unzip (tabulate n f)
@@ -41,7 +37,7 @@ module wyllie : list_ranking = {
   def list_ranking [n] (_: i64) (S: [n]i64) : [n]i32 =
     let R = replicate n 1
     let (R, _) =
-      loop (R, S) for _i < 64 - i64.clz n do
+      loop (R, S) for _i < ceil_log2 n do
         step R S
     in R
 }
@@ -89,7 +85,7 @@ module random_mate_utils = {
       tabulate m (\i -> if hash (i32.i64 (i ^ t)) % 2 == 0 then #F else #M)
     let sexes' = scatter sexes active sexes'
     let update i =
-      if S[i] == n
+      if S[i] == nil
       then -- no update, remove inactive element
            (-1i64, i)
       else if sexes'[i] == #F && sexes'[S[i]] == #M
@@ -134,14 +130,14 @@ module random_mate : list_ranking = {
       -- Pointer jumping phase
       loop (R, S, t, active, sexes, keep, removed, removed_offsets) =
              (R, copy S, 1i64, active, sexes, keep, removed, removed_offsets)
-      while S[h] != n do
+      while S[h] != nil do
         loop_body R S t active sexes keep removed removed_offsets
     -- Reconstruction phase
     let n_rounds = t
     in loop R = copy R
        for t in n_rounds - 1..n_rounds - 2...1 do
          let RA_now = removed[removed_offsets[t - 1]:removed_offsets[t]]
-         let updateR = map (\i -> if S[i] == n then R[i] else R[i] + R[S[i]]) RA_now
+         let updateR = map (\i -> if S[i] == nil then R[i] else R[i] + R[S[i]]) RA_now
          in (scatter R RA_now updateR)
 }
 
@@ -154,7 +150,7 @@ module random_mate_optim : list_ranking = {
     loop (R, S) for _i < 64 - i64.clz n do
       -- step
       let f i =
-        if S[i] == n
+        if S[i] == nil
         then (R[i], S[i])
         else (R[i] + R[S[i]], S[S[i]])
       let (R', S') = unzip (map f active)
@@ -168,12 +164,12 @@ module random_mate_optim : list_ranking = {
     let keep = replicate n true
     let removed = replicate n (-1i64)
     let removed_offsets = replicate n 0
-    let cut_off = n / ilog2 n
+    let cut_off = n / floor_log2 n
     let (R, S, t, active, _, _, removed, removed_offsets) =
       -- Pointer jumping phase
       loop (R, S, t, active, sexes, keep, removed, removed_offsets) =
              (R, copy S, 1i64, active, sexes, keep, removed, removed_offsets)
-      while S[h] != n && length active > cut_off do
+      while S[h] != nil && length active > cut_off do
         loop_body R S t active sexes keep removed removed_offsets
     --  might have to also get S post-wyllie
     let (R, S) = modified_wyllie R S active
@@ -182,7 +178,7 @@ module random_mate_optim : list_ranking = {
     in loop R = copy R
        for t in n_rounds - 1..n_rounds - 2...1 do
          let RA_now = removed[removed_offsets[t - 1]:removed_offsets[t]]
-         let updateR = map (\i -> if S[i] == n then R[i] else R[i] + R[S[i]]) RA_now
+         let updateR = map (\i -> if S[i] == nil then R[i] else R[i] + R[S[i]]) RA_now
          in (scatter R RA_now updateR)
 }
 
@@ -194,9 +190,6 @@ module work_efficient : list_ranking = {
     then -1
     else a ^ b |> i64.ctz |> i8.i32
 
-  def predecessor [n] (succ: [n]i64) : [n]i64 =
-    scatter (rep n) succ (iota n)
-
   def init_color (n: i64) : [n]i64 = iota n
 
   def logn_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
@@ -205,22 +198,9 @@ module work_efficient : list_ranking = {
   def bit (v: i64) (b: i8) : i8 =
     i8.i64 ((v >> i64.i8 b) & 1)
 
-  def find_index 'a [n] (p: a -> bool) (as: [n]a) : i64 =
-    let op (x, i) (y, j) =
-      if x && y
-      then if i < j
-           then (x, i)
-           else (y, j)
-      else if y
-      then (y, j)
-      else (x, i)
-    in (reduce_comm op (false, -1) (zip (map p as) (iota n))).1
-
-  def ceil_log2 x = i64.num_bits - i64.clz (x - 1)
-
   def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
-    let pred = predecessor succ
-    let l = find_index (== n) succ
+    let pred = invert succ
+    let l = end succ
     let succ = copy succ with [l] = h
     let pred = copy pred with [h] = l
     let color0 = init_color n
@@ -267,8 +247,8 @@ entry blocked_list (n: i64) (B: i64) =
   let tmp = map (.1) (radix_sort_by_key (.0) u64.num_bits u64.get_bit (zip keys (iota n)))
   let (idx, S) = zip tmp (rotate 1 tmp) |> unzip
   let lst = scatter (replicate n 0) idx S
-  let lst[n - 1] = n
-  let h = head lst
+  let h = lst[n - 1]
+  let lst[n - 1] = nil
   in (h, lst)
 
 def mk_test list_ranking h S =
