@@ -31,14 +31,17 @@ def blocked_list_ranking [n] (m: i64) (selected: [n]bool) (succ: [n]i64) : [n]i3
   let (active_after, active_rank) =
     loop (active, active_rank)
     for _i < m do
-      let (active, active_rank) =
-        map2 (\r a ->
+      let (is, active, active_rank) =
+        map3 (\i r a ->
                 if a == nil || selected[a]
-                then (a, r)
-                else (succ[a], r + 1))
+                then (-1, a, r)
+                else (i, succ[a], r + 1))
+             (indices active)
              active_rank
              active
-        |> unzip
+        |> unzip3
+      let active = scatter (copy active) is active
+      let active_rank = scatter (copy active_rank) is active_rank
       in (active, active_rank)
   let ruler_list =
     scatter (map (const nil) (indices active_after))
