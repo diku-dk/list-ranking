@@ -185,44 +185,6 @@ module random_mate_optim : list_ranking = {
 -- | Anderson/Miller list ranking. Deterministic and work efficient
 -- but suboptimal implementation at this moment.
 module work_efficient : list_ranking = {
-  def lsb_diff (a: i64) (b: i64) : i8 =
-    if a == b
-    then -1
-    else a ^ b |> i64.ctz |> i8.i32
-
-  def init_color (n: i64) : [n]i64 = iota n
-
-  def logn_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
-    tabulate n (\i -> lsb_diff color[i] color[succ[i]])
-
-  def bit (v: i64) (b: i8) : i8 =
-    i8.i64 ((v >> i64.i8 b) & 1)
-
-  def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
-    let l = end succ
-    let succ = copy succ with [l] = h
-    let color0 = init_color n
-    let color1 = logn_coloring color0 succ
-    let is_local_min = tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
-    let is_local_max = tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
-    let selected =
-      tabulate n (\i ->
-                    let neighbor_is_local_min = is_local_min[i] || is_local_min[succ[succ[i]]]
-                    let coin = bit color0[succ[i]] color1[succ[i]]
-                    in is_local_min[succ[i]] && ((not neighbor_is_local_min) || coin == 1))
-    let available =
-      tabulate n (\i ->
-                    not selected[succ[i]]
-                    && not selected[i]
-                    && not selected[succ[succ[i]]]
-                    && is_local_max[succ[i]])
-    let selected' =
-      tabulate n (\i ->
-                    let neighbor_is_available = available[i] || available[succ[succ[i]]]
-                    let coin = bit color0[succ[i]] color1[succ[i]]
-                    in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
-    in selected'
-
   def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
     if n == 0
     then [] :> [n]i32
@@ -232,44 +194,6 @@ module work_efficient : list_ranking = {
 }
 
 module work_efficient_filter : list_ranking = {
-  def lsb_diff (a: i64) (b: i64) : i8 =
-    if a == b
-    then -1
-    else a ^ b |> i64.ctz |> i8.i32
-
-  def init_color (n: i64) : [n]i64 = iota n
-
-  def logn_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
-    tabulate n (\i -> lsb_diff color[i] color[succ[i]])
-
-  def bit (v: i64) (b: i8) : i8 =
-    i8.i64 ((v >> i64.i8 b) & 1)
-
-  def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
-    let l = end succ
-    let succ = copy succ with [l] = h
-    let color0 = init_color n
-    let color1 = logn_coloring color0 succ
-    let is_local_min = tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
-    let is_local_max = tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
-    let selected =
-      tabulate n (\i ->
-                    let neighbor_is_local_min = is_local_min[i] || is_local_min[succ[succ[i]]]
-                    let coin = bit color0[succ[i]] color1[succ[i]]
-                    in is_local_min[succ[i]] && ((not neighbor_is_local_min) || coin == 1))
-    let available =
-      tabulate n (\i ->
-                    not selected[succ[i]]
-                    && not selected[i]
-                    && not selected[succ[succ[i]]]
-                    && is_local_max[succ[i]])
-    let selected' =
-      tabulate n (\i ->
-                    let neighbor_is_available = available[i] || available[succ[succ[i]]]
-                    let coin = bit color0[succ[i]] color1[succ[i]]
-                    in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
-    in selected'
-
   def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
     if n == 0
     then [] :> [n]i32
