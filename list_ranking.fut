@@ -141,6 +141,62 @@ module random_mate : list_ranking = {
          in (scatter R RA_now updateR)
 }
 
+module type state = {
+  type s
+  val update_state : s -> *s
+  val is_active : s -> i64 -> bool
+  val init_state [n] : (h: i64) -> [n]i64 -> s
+}
+
+module list_ranking_independent_set (S: state) = {
+  type s = S.s
+
+  #[inline]
+  def update_state = S.update_state
+
+  #[inline]
+  def is_active = S.is_active
+
+  #[inline]
+  def init_state = S.init_state
+
+  #[inline]
+  def loop_body [n] [m]
+                (rank: *[n]i32)
+                (succ: *[n]i64)
+                (t: i64)
+                (active: [m]i64)
+                (removed: *[n]i64)
+                (removed_offsets: *[n]i64)
+                (state: s) : (*[n]i32, *[n]i64, i64, []i64, *[n]i64, *[n]i64, *s) =
+    let (active, dead) = partition (\i -> is_active state i) active
+    let update i = (rank[i] + rank[succ[i]], succ[succ[i]])
+    let (updated_ranks, updated_succ) = unzip (map update active)
+    let rank = scatter rank active updated_ranks
+    let succ = scatter succ active updated_succ
+    let removed = scatter removed (map (+ removed_offsets[t - 1]) (indices dead)) dead
+    let removed_offsets = removed_offsets with [t] = length dead + removed_offsets[t - 1]
+    let state = update_state state
+    in (rank, succ, t + 1i64, active, removed, removed_offsets, state)
+
+  def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
+    let rank = replicate n 1i32
+    let active = iota n
+    let removed = replicate n (-1i64)
+    let removed_offsets = replicate n 0
+    let s = init_state h succ
+    let (rank, succ, t_rounds, _, removed, removed_offsets, _) =
+      loop (rank, succ, t, active, removed, removed_offsets, s) =
+             (rank, copy succ, 1i64, active, removed, removed_offsets, s)
+      while not (null active) do
+        loop_body rank succ t active removed removed_offsets s
+    in loop rank
+       for t in t_rounds - 1..t_rounds - 2...1 do
+         let is = removed[removed_offsets[t - 1]:removed_offsets[t]]
+         let rs = map (\i -> if succ[i] == nil then rank[i] else rank[i] + rank[succ[i]]) is
+         in scatter rank is rs
+}
+
 -- | A variant of Random Mate that shifts to using Wyllie's algorithm once a
 -- certain threshold has been reached.
 module random_mate_optim : list_ranking = {
