@@ -53,7 +53,9 @@ def bit (v: i64) (b: i8) : i8 =
 def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let l = end succ
   let succ = copy succ with [l] = h
-  let color0 = init_color n
+  let color0 =
+    init_color n
+    |> map2 (\i c -> if i == h then n else c) (iota n)
   let color1 = logk_coloring color0 succ
   let is_local_min = tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
   let is_local_max = tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
