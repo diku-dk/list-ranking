@@ -142,60 +142,109 @@ module random_mate : list_ranking = {
 }
 
 module type state = {
-  type s
-  val update_state : s -> *s
-  val is_active : s -> i64 -> bool
-  val init_state [n] : (h: i64) -> [n]i64 -> s
+  type^ s
+  val get_rulers [n] : (t: i64) -> (h: i64) -> (succ: [n]i64) -> *s
+  val is_ruler : s -> i64 -> bool
 }
 
-module list_ranking_independent_set (S: state) = {
-  type s = S.s
+module list_ranking_independent_set (S: state) : list_ranking = {
+  type^ s = S.s
 
   #[inline]
-  def update_state = S.update_state
+  def is_ruler = S.is_ruler
 
   #[inline]
-  def is_active = S.is_active
+  def get_rulers = S.get_rulers
 
-  #[inline]
-  def init_state = S.init_state
+  def gather [n] [m] 'a (as: [n]a) (is: [m]i64) =
+    map (\i -> as[i]) is
 
   #[inline]
   def loop_body [n] [m]
-                (rank: *[n]i32)
-                (succ: *[n]i64)
+                (rank: *[m]i32)
+                (succ: *[m]i64)
+                (is: *[m]i64)
+                (final_rank: *[n]i32)
+                (final_succ: *[n]i64)
+                (h: i64)
                 (t: i64)
-                (active: [m]i64)
                 (removed: *[n]i64)
-                (removed_offsets: *[n]i64)
-                (state: s) : (*[n]i32, *[n]i64, i64, []i64, *[n]i64, *[n]i64, *s) =
-    let (active, dead) = partition (\i -> is_active state i) active
-    let update i = (rank[i] + rank[succ[i]], succ[succ[i]])
-    let (updated_ranks, updated_succ) = unzip (map update active)
-    let rank = scatter rank active updated_ranks
-    let succ = scatter succ active updated_succ
-    let removed = scatter removed (map (+ removed_offsets[t - 1]) (indices dead)) dead
-    let removed_offsets = removed_offsets with [t] = length dead + removed_offsets[t - 1]
-    let state = update_state state
-    in (rank, succ, t + 1i64, active, removed, removed_offsets, state)
+                (removed_offsets: *[]i64) : ?[k].(*[k]i32, *[k]i64, *[k]i64, *[n]i32, *[n]i64, i64, i64, *[n]i64, *[]i64) =
+    let state = get_rulers t h succ
+    let active = tabulate m (is_ruler state)
+    let update i a r s =
+      if succ[i] == nil
+      then (r, s, i)
+      else if a
+      then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i])
+      else (r, s, nil)
+    let (rank, succ, remove) = unzip3 (map4 update (iota m) active rank succ)
+    let keep = scatter (replicate m true) remove (rep false)
+    let (active, dead) = copy (partition (\i -> keep[i]) (iota m))
+    let active_is = gather is active
+    let dead_is = gather is dead
+    let active_rank = gather rank active
+    let active_succ = gather succ active
+    let removed_is = map (+ removed_offsets[t - 1]) (indices dead)
+    let removed = scatter removed removed_is dead_is
+    let final_rank = scatter final_rank active_is active_rank
+    let final_succ = scatter final_succ active_is active_succ
+    let removed_offsets =
+      if length removed_offsets == t
+      then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
+           in removed_offsets with [t] = length dead + removed_offsets[t - 1]
+      else removed_offsets with [t] = length dead + removed_offsets[t - 1]
+    let compressed =
+      map i64.bool keep
+      |> scan (+) 0
+      |> map (+ (-1))
+    let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) active
+    let is = gather is active
+    let rank = gather rank active
+    in (rank, succ, is, final_rank, final_succ, compressed[h], t + 1i64, removed, removed_offsets)
 
   def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
     let rank = replicate n 1i32
-    let active = iota n
     let removed = replicate n (-1i64)
-    let removed_offsets = replicate n 0
-    let s = init_state h succ
-    let (rank, succ, t_rounds, _, removed, removed_offsets, _) =
-      loop (rank, succ, t, active, removed, removed_offsets, s) =
-             (rank, copy succ, 1i64, active, removed, removed_offsets, s)
-      while not (null active) do
-        loop_body rank succ t active removed removed_offsets s
+    let removed_offsets = replicate 8 0
+    let (last_rank, _, last_is, rank, succ, _, t_rounds, removed, removed_offsets) =
+      loop (rank, succ, is, final_rank, final_succ, h, t, removed, removed_offsets) =
+             #[trace] (copy rank, copy succ, (iota n), rank, copy succ, h, 1i64, removed, removed_offsets)
+      while length succ != 1 do
+        #[trace] loop_body rank succ is final_rank final_succ h t removed removed_offsets
+    let rank[last_is[0]] = last_rank[0]
+    let succ = #[trace] succ
+    let rank = #[trace] rank
     in loop rank
        for t in t_rounds - 1..t_rounds - 2...1 do
-         let is = removed[removed_offsets[t - 1]:removed_offsets[t]]
+         let is = #[trace] removed[removed_offsets[t - 1]:removed_offsets[t]]
          let rs = map (\i -> if succ[i] == nil then rank[i] else rank[i] + rank[succ[i]]) is
-         in scatter rank is rs
+         in #[trace] scatter rank is rs
 }
+
+module random_mate_state : state = {
+  type^ s = ?[n].[n]bool
+  def is_ruler [n] (s: [n]bool) (i: i64) : bool = s[i]
+
+  def hash (x: i32) : i32 =
+    let x = u32.i32 x
+    let x = ((x >> 16) ^ x) * 0x45d9f3b
+    let x = ((x >> 16) ^ x) * 0x45d9f3b
+    let x = ((x >> 16) ^ x)
+    in i32.u32 x
+
+  def get_rulers [n] (t: i64) (h: i64) (succ: [n]i64) : *[n]bool =
+    let flip i =
+      (hash (i32.i64 (i ^ t)) % 2 == 0 || i == h)
+      && succ[i] != nil
+    let flips = map flip (indices succ)
+    in map (\i ->
+              flips[i] && not (flips[succ[i]]))
+           (indices succ)
+}
+
+module random_mate_example : list_ranking =
+  list_ranking_independent_set random_mate_state
 
 -- | A variant of Random Mate that shifts to using Wyllie's algorithm once a
 -- certain threshold has been reached.
@@ -282,15 +331,14 @@ def mk_test list_ranking h S =
   in and (map2 (==) expected res)
 
 -- ==
--- entry: sequential_test random_mate_test random_mate_optim_test work_efficient_test work_efficient_filter_test
+-- entry: sequential_test random_mate_test random_mate_optim_test random_mate_example_test
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
 entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
-entry work_efficient_test = mk_test work_efficient.list_ranking
-entry work_efficient_filter_test = mk_test work_efficient_filter.list_ranking
+entry random_mate_example_test = mk_test random_mate_example.list_ranking
 
 -- entry: sequential_bench
 -- compiled notest script input { blocked_list 1000000i64 1i64 }
@@ -303,7 +351,7 @@ entry work_efficient_filter_test = mk_test work_efficient_filter.list_ranking
 entry sequential_bench = sequential.list_ranking
 
 -- ==
--- entry: wyllie_bench random_mate_bench random_mate_optim_bench work_efficient_bench work_efficient_filter_bench
+-- entry: wyllie_bench random_mate_bench random_mate_optim_bench
 -- compiled notest script input { blocked_list 100000000i64 1i64 }
 -- compiled notest script input { blocked_list 100000000i64 10i64 }
 -- compiled notest script input { blocked_list 100000000i64 100i64 }
@@ -316,8 +364,6 @@ entry sequential_bench = sequential.list_ranking
 entry wyllie_bench = wyllie.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_optim_bench = random_mate_optim.list_ranking
-entry work_efficient_bench = work_efficient.list_ranking
-entry work_efficient_filter_bench = work_efficient_filter.list_ranking
 
 entry average_stride [n] (S: [n]i64) =
   map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
