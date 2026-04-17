@@ -37,6 +37,12 @@ def lsb_diff (a: i64) (b: i64) : i8 =
   then -1
   else a ^ b |> i64.ctz |> i8.i32
 
+-- | Least Significant Bit Difference (e.g. lsb 0b0101 0b0001 == 2 )
+def lsb_diff_i8 (a: i8) (b: i8) : i8 =
+  if a == b
+  then -1
+  else a ^ b |> i8.ctz |> i8.i32
+
 -- | An initial n-coloring of a list.
 def init_color (n: i64) : [n]i64 = iota n
 
@@ -49,13 +55,15 @@ def logk_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
 def bit (v: i64) (b: i8) : i8 =
   i8.i64 ((v >> i64.i8 b) & 1)
 
+-- | The different found in lsb_diff.
+def bit_i8 (v: i8) (b: i8) : i8 =
+  (v >> b) & 1
+
 -- | Construct a log n-ruling set.
-def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def logn_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let l = end succ
   let succ = copy succ with [l] = h
-  let color0 =
-    init_color n
-    |> map2 (\i c -> if i == h then n else c) (iota n)
+  let color0 = init_color n
   let color1 = logk_coloring color0 succ
   let is_local_min = tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
   let is_local_max = tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
@@ -76,3 +84,31 @@ def ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
                   let coin = bit color0[succ[i]] color1[succ[i]]
                   in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
   in selected'
+
+def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+  let set = rep false
+  let is = iota n
+  let (set, _, _, _) =
+    loop (set, h, succ, is)
+    while 1 < length succ do
+      let set' = copy (logn_ruling_set h succ)
+      let (js, js') =
+        map (\i ->
+               if set'[i]
+               then (succ[i], i)
+               else if succ[i] != nil && set'[succ[i]]
+               then (i, nil)
+               else (nil, nil))
+            (indices succ)
+        |> unzip
+      let set = scatter set (map (\j -> if j == nil then nil else is[j]) js') (rep true)
+      let set' = scatter set' js (rep true)
+      let keep = filter (\i -> not set'[i]) (indices succ)
+      let compressed = scatter (replicate (length succ) nil) keep (indices keep)
+      let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) keep
+      let is = map (\i -> is[i]) keep
+      in (set, compressed[h], succ, is)
+  let set[h] = true
+  let set[succ[h]] = false
+  let set = map2 (\i s -> if i == nil then false else s) succ set
+  in set
