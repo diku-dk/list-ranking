@@ -192,6 +192,7 @@ module list_ranking_independent_set (S: state) : list_ranking = {
       then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
            in removed_offsets with [t] = length dead + removed_offsets[t - 1]
       else removed_offsets with [t] = length dead + removed_offsets[t - 1]
+    -- Maybe use binary search?
     let compressed = scatter (replicate m nil) active (indices active)
     let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) active
     let is = gather is active
@@ -232,9 +233,8 @@ module random_mate_state : state = {
     let flip i =
       (hash (i32.i64 (i ^ t)) % 2 == 0 || i == h)
       && succ[i] != nil
-    let flips = map flip (indices succ)
     in map (\i ->
-              flips[i] && not (flips[succ[i]]))
+              flip i && not (flip succ[i]))
            (indices succ)
 }
 
