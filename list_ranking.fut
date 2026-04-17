@@ -170,47 +170,48 @@ module list_ranking_independent_set (S: state) : list_ranking = {
                 (t: i64)
                 (removed: *[n]i64)
                 (removed_offsets: *[]i64) : ?[k].(*[k]i32, *[k]i64, *[k]i64, *[n]i32, *[n]i64, i64, i64, *[n]i64, *[]i64) =
-    let state = get_rulers t h succ
-    let active = tabulate m (is_ruler state)
-    let update i a r s =
-      if a
-      then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i])
-      else (r, s, nil)
-    let (rank, succ, remove) = unzip3 (map4 update (iota m) active rank succ)
-    let keep = scatter (replicate m true) remove (rep false)
-    let (active, dead) = copy (partition (\i -> keep[i]) (iota m))
-    let dead_is = gather is dead
-    let removed_is = map (+ removed_offsets[t - 1]) (indices dead)
-    let removed = scatter removed removed_is dead_is
-    let dead_rank = gather rank dead
-    let final_rank = scatter final_rank dead_is dead_rank
-    let dead_succ =
-      map (\a -> if succ[a] == nil then nil else is[succ[a]]) dead
-    let final_succ = scatter final_succ dead_is dead_succ
-    let removed_offsets =
-      if length removed_offsets == t
-      then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
-           in removed_offsets with [t] = length dead + removed_offsets[t - 1]
-      else removed_offsets with [t] = length dead + removed_offsets[t - 1]
-    -- Maybe use binary search?
-    let compressed = scatter (replicate m nil) active (indices active)
-    let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) active
-    let is = gather is active
-    let rank = gather rank active
-    in (rank, succ, is, final_rank, final_succ, compressed[h], t + 1i64, removed, removed_offsets)
+    if length succ == 1
+    then let final_rank[is[0]] = rank[0]
+         in ([], [], [], final_rank, final_succ, h, t, removed, removed_offsets)
+    else let state = get_rulers t h succ
+         let active = tabulate m (is_ruler state)
+         let update i a r s =
+           if succ[i] == nil
+           then (r, s, nil)
+           else if a
+           then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i])
+           else (r, s, nil)
+         let (rank, succ, remove) = unzip3 (map4 update (iota m) active rank succ)
+         let keep = scatter (replicate m true) remove (rep false)
+         let (active, dead) = copy (partition (\i -> keep[i]) (iota m))
+         let dead_is = gather is dead
+         let removed_is = map (+ removed_offsets[t - 1]) (indices dead)
+         let removed = scatter removed removed_is dead_is
+         let dead_rank = gather rank dead
+         let final_rank = scatter final_rank dead_is dead_rank
+         let dead_succ =
+           map (\a -> if succ[a] == nil then nil else is[succ[a]]) dead
+         let final_succ = scatter final_succ dead_is dead_succ
+         let removed_offsets =
+           if length removed_offsets == t
+           then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
+                in removed_offsets with [t] = length dead + removed_offsets[t - 1]
+           else removed_offsets with [t] = length dead + removed_offsets[t - 1]
+         let compressed = scatter (replicate m nil) active (indices active)
+         let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) active
+         let is = gather is active
+         let rank = gather rank active
+         in (rank, succ, is, final_rank, final_succ, compressed[h], t + 1i64, removed, removed_offsets)
 
   def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
     let rank = replicate n 1i32
     let removed = replicate n (-1i64)
-    let removed_offsets = replicate 8 0
-    let (last_rank, _, last_is, rank, succ, _, t_rounds, removed, removed_offsets) =
+    let removed_offsets = replicate 128 0
+    let (_, _, _, rank, succ, _, t_rounds, removed, removed_offsets) =
       loop (rank, succ, is, final_rank, final_succ, h, t, removed, removed_offsets) =
              (copy rank, copy succ, (iota n), rank, copy succ, h, 1i64, removed, removed_offsets)
-      while length succ != 1 do
+      while not (null succ) do
         loop_body rank succ is final_rank final_succ h t removed removed_offsets
-    let rank[last_is[0]] = last_rank[0]
-    let succ = succ
-    let rank = rank
     in loop rank
        for t in t_rounds - 1..t_rounds - 2...1 do
          let is = removed[removed_offsets[t - 1]:removed_offsets[t]]
@@ -240,6 +241,17 @@ module random_mate_state : state = {
 
 module random_mate_example : list_ranking =
   list_ranking_independent_set random_mate_state
+
+module cole_vishkin_state : state = {
+  type^ s = ?[n].[n]bool
+  def is_ruler [n] (s: [n]bool) (i: i64) : bool = s[i]
+
+  def get_rulers [n] (_: i64) (h: i64) (succ: [n]i64) : *[n]bool =
+    two_ruling_set h (copy succ)
+}
+
+module cole_vishkin : list_ranking =
+  list_ranking_independent_set cole_vishkin_state
 
 -- | A variant of Random Mate that shifts to using Wyllie's algorithm once a
 -- certain threshold has been reached.
@@ -282,26 +294,6 @@ module random_mate_optim : list_ranking = {
          in (scatter R RA_now updateR)
 }
 
--- | Anderson/Miller list ranking. Deterministic and work efficient
--- but suboptimal implementation at this moment.
-module work_efficient : list_ranking = {
-  def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
-    if n == 0
-    then [] :> [n]i32
-    else let selected = ruling_set h succ
-         let selected = map2 (\i s -> i == h || s) (iota n) selected
-         in blocked_list_ranking (ceil_log2 n) selected succ
-}
-
-module work_efficient_filter : list_ranking = {
-  def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
-    if n == 0
-    then [] :> [n]i32
-    else let selected = ruling_set h succ
-         let selected = map2 (\i s -> i == h || s) (iota n) selected
-         in blocked_list_ranking_filter selected succ
-}
-
 entry blocked_list (n: i64) (B: i64) =
   let seed = 13632
   let rng = rng_engine.rng_from_seed [seed]
@@ -326,7 +318,7 @@ def mk_test list_ranking h S =
   in and (map2 (==) expected res)
 
 -- ==
--- entry: sequential_test random_mate_test random_mate_optim_test random_mate_example_test
+-- entry: sequential_test random_mate_test random_mate_optim_test random_mate_example_test cole_vishkin_test
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
@@ -334,6 +326,7 @@ entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
 entry random_mate_example_test = mk_test random_mate_example.list_ranking
+entry cole_vishkin_test = mk_test cole_vishkin.list_ranking
 
 -- entry: sequential_bench
 -- compiled notest script input { blocked_list 1000000i64 1i64 }
@@ -347,15 +340,14 @@ entry sequential_bench = sequential.list_ranking
 
 -- ==
 -- entry: wyllie_bench random_mate_bench random_mate_optim_bench random_mate_example_bench
--- compiled notest script input { blocked_list 100000000i64 1i64 }
--- compiled notest script input { blocked_list 100000000i64 10i64 }
--- compiled notest script input { blocked_list 100000000i64 100i64 }
--- compiled notest script input { blocked_list 100000000i64 1000i64 }
--- compiled notest script input { blocked_list 100000000i64 10000i64 }
--- compiled notest script input { blocked_list 100000000i64 100000i64 }
--- compiled notest script input { blocked_list 100000000i64 1000000i64 }
--- compiled notest script input { blocked_list 100000000i64 10000000i64 }
--- compiled notest script input { blocked_list 100000000i64 100000000i64 }
+-- compiled notest script input { blocked_list 20000000i64 1i64 }
+-- compiled notest script input { blocked_list 20000000i64 10i64 }
+-- compiled notest script input { blocked_list 20000000i64 100i64 }
+-- compiled notest script input { blocked_list 20000000i64 1000i64 }
+-- compiled notest script input { blocked_list 20000000i64 10000i64 }
+-- compiled notest script input { blocked_list 20000000i64 100000i64 }
+-- compiled notest script input { blocked_list 20000000i64 1000000i64 }
+-- compiled notest script input { blocked_list 20000000i64 10000000i64 }
 entry wyllie_bench = wyllie.list_ranking
 entry random_mate_example_bench = random_mate_example.list_ranking
 entry random_mate_bench = random_mate.list_ranking
