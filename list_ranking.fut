@@ -173,31 +173,26 @@ module list_ranking_independent_set (S: state) : list_ranking = {
     let state = get_rulers t h succ
     let active = tabulate m (is_ruler state)
     let update i a r s =
-      if succ[i] == nil
-      then (r, s, i)
-      else if a
+      if a
       then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i])
       else (r, s, nil)
     let (rank, succ, remove) = unzip3 (map4 update (iota m) active rank succ)
     let keep = scatter (replicate m true) remove (rep false)
     let (active, dead) = copy (partition (\i -> keep[i]) (iota m))
-    let active_is = gather is active
     let dead_is = gather is dead
-    let active_rank = gather rank active
-    let active_succ = gather succ active
     let removed_is = map (+ removed_offsets[t - 1]) (indices dead)
     let removed = scatter removed removed_is dead_is
-    let final_rank = scatter final_rank active_is active_rank
-    let final_succ = scatter final_succ active_is active_succ
+    let dead_rank = gather rank dead
+    let final_rank = scatter final_rank dead_is dead_rank
+    let dead_succ =
+      map (\a -> if succ[a] == nil then nil else is[succ[a]]) dead
+    let final_succ = scatter final_succ dead_is dead_succ
     let removed_offsets =
       if length removed_offsets == t
       then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
            in removed_offsets with [t] = length dead + removed_offsets[t - 1]
       else removed_offsets with [t] = length dead + removed_offsets[t - 1]
-    let compressed =
-      map i64.bool keep
-      |> scan (+) 0
-      |> map (+ (-1))
+    let compressed = scatter (replicate m nil) active (indices active)
     let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) active
     let is = gather is active
     let rank = gather rank active
@@ -209,17 +204,17 @@ module list_ranking_independent_set (S: state) : list_ranking = {
     let removed_offsets = replicate 8 0
     let (last_rank, _, last_is, rank, succ, _, t_rounds, removed, removed_offsets) =
       loop (rank, succ, is, final_rank, final_succ, h, t, removed, removed_offsets) =
-             #[trace] (copy rank, copy succ, (iota n), rank, copy succ, h, 1i64, removed, removed_offsets)
+             (copy rank, copy succ, (iota n), rank, copy succ, h, 1i64, removed, removed_offsets)
       while length succ != 1 do
-        #[trace] loop_body rank succ is final_rank final_succ h t removed removed_offsets
+        loop_body rank succ is final_rank final_succ h t removed removed_offsets
     let rank[last_is[0]] = last_rank[0]
-    let succ = #[trace] succ
-    let rank = #[trace] rank
+    let succ = succ
+    let rank = rank
     in loop rank
        for t in t_rounds - 1..t_rounds - 2...1 do
-         let is = #[trace] removed[removed_offsets[t - 1]:removed_offsets[t]]
+         let is = removed[removed_offsets[t - 1]:removed_offsets[t]]
          let rs = map (\i -> if succ[i] == nil then rank[i] else rank[i] + rank[succ[i]]) is
-         in #[trace] scatter rank is rs
+         in scatter rank is rs
 }
 
 module random_mate_state : state = {
@@ -351,7 +346,7 @@ entry random_mate_example_test = mk_test random_mate_example.list_ranking
 entry sequential_bench = sequential.list_ranking
 
 -- ==
--- entry: wyllie_bench random_mate_bench random_mate_optim_bench
+-- entry: wyllie_bench random_mate_bench random_mate_optim_bench random_mate_example_bench
 -- compiled notest script input { blocked_list 100000000i64 1i64 }
 -- compiled notest script input { blocked_list 100000000i64 10i64 }
 -- compiled notest script input { blocked_list 100000000i64 100i64 }
@@ -362,6 +357,7 @@ entry sequential_bench = sequential.list_ranking
 -- compiled notest script input { blocked_list 100000000i64 10000000i64 }
 -- compiled notest script input { blocked_list 100000000i64 100000000i64 }
 entry wyllie_bench = wyllie.list_ranking
+entry random_mate_example_bench = random_mate_example.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_optim_bench = random_mate_optim.list_ranking
 
