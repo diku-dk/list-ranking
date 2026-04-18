@@ -49,7 +49,7 @@ def init_color (n: i64) : [n]i64 = iota n
 -- | A log k-coloring constructed from a list and a k-coloring and a
 -- list.
 def logk_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
-  tabulate n (\i -> lsb_diff color[i] color[succ[i]])
+  tabulate n (\i -> if succ[i] == nil then 0 else lsb_diff color[i] color[succ[i]])
 
 -- | The different found in lsb_diff.
 def bit (v: i64) (b: i8) : i8 =
@@ -85,22 +85,24 @@ def logn_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
                   in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
   in selected'
 
-def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def two_ruling_set [n] (h: i64) (succ: *[n]i64) : [n]bool =
   let set = rep false
   let is = iota n
+  let h_succ = succ[h]
   let (set, _, _, _) =
     loop (set, h, succ, is)
     while 1 < length succ do
       let set' = copy (logn_ruling_set h succ)
-      let (js, js') =
+      let (js, js', ks, ps) =
         map (\i ->
                if set'[i]
-               then (succ[i], i)
+               then (succ[i], i, nil, nil)
                else if succ[i] != nil && set'[succ[i]]
-               then (i, nil)
-               else (nil, nil))
+               then (i, nil, i, if succ[succ[i]] == nil then nil else succ[succ[succ[i]]])
+               else (nil, nil, nil, nil))
             (indices succ)
-        |> unzip
+        |> unzip4
+      let succ = scatter succ ks ps
       let set = scatter set (map (\j -> if j == nil then nil else is[j]) js') (rep true)
       let set' = scatter set' js (rep true)
       let keep = filter (\i -> not set'[i]) (indices succ)
@@ -109,6 +111,5 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
       let is = map (\i -> is[i]) keep
       in (set, compressed[h], succ, is)
   let set[h] = true
-  let set[succ[h]] = false
-  let set = map2 (\i s -> if i == nil then false else s) succ set
+  let set[h_succ] = false
   in set
