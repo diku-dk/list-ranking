@@ -1,5 +1,8 @@
 -- | Common functions.
 
+import "lib/github.com/diku-dk/cpprandom/random"
+import "lib/github.com/diku-dk/sorts/radix_sort"
+
 -- | Values for pointing to nothing.
 def nil : i64 = -1
 
@@ -67,53 +70,101 @@ def bit (v: i64) (b: i8) : i8 =
 def bit_i8 (v: i8) (b: i8) : i8 =
   (v >> b) & 1
 
--- | Construct a log n-ruling set.
-def logn_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def predecessor [n] (succ: [n]i64) : [n]i64 =
+  scatter (rep nil) succ (iota n)
+
+def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+  let pred = predecessor succ
+  let l = end succ
+  let succ = copy succ with [l] = h
+  let pred = copy pred with [h] = l
+  let color0 = init_color n
+  let color1 = logk_coloring color0 succ
+  let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
+  let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
+  let selected =
+    tabulate n (\i ->
+                  let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
+                  let coin = bit color0[i] color1[i]
+                  in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
+  let available =
+    tabulate n (\i ->
+                  not selected[i]
+                  && not selected[pred[i]]
+                  && not selected[succ[i]]
+                  && is_local_max[i])
+  let selected' =
+    tabulate n (\i ->
+                  let neighbor_is_available = available[pred[i]] || available[succ[i]]
+                  let coin = bit color0[i] color1[i]
+                  in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
+  in selected'
+
+def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let l = end succ
   let succ = copy succ with [l] = h
   let color0 = init_color n
   let color1 = logk_coloring color0 succ
-  let is_local_min = tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
-  let is_local_max = tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
+  let is_local_min =
+    tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
+    |> scatter (replicate n false) (rotate 1 (iota n))
+  let is_local_max =
+    tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
+    |> scatter (replicate n false) (rotate 1 (iota n))
   let selected =
     tabulate n (\i ->
                   let neighbor_is_local_min = is_local_min[i] || is_local_min[succ[succ[i]]]
                   let coin = bit color0[succ[i]] color1[succ[i]]
                   in is_local_min[succ[i]] && ((not neighbor_is_local_min) || coin == 1))
+    |> scatter (replicate n false) (rotate 1 (iota n))
   let available =
     tabulate n (\i ->
                   not selected[succ[i]]
                   && not selected[i]
                   && not selected[succ[succ[i]]]
                   && is_local_max[succ[i]])
+    |> scatter (replicate n false) (rotate 1 (iota n))
   let selected' =
     tabulate n (\i ->
                   let neighbor_is_available = available[i] || available[succ[succ[i]]]
                   let coin = bit color0[succ[i]] color1[succ[i]]
                   in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
+    |> scatter (replicate n false) (rotate 1 (iota n))
   in selected'
 
-def two_ruling_set [n] (h: i64) (succ: *[n]i64) : [n]bool =
+-- | Construct a log n-ruling set.
+def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let set = rep false
   let is = iota n
+  let succ = copy succ
   let h_succ = succ[h]
   let (set, _, _, _) =
     loop (set, h, succ, is)
     while 1 < length succ do
-      let set' = assert (is_valid_list h succ) (copy (logn_ruling_set h succ))
-      let (js, js', ks, ps) =
+      let small_set = assert (is_valid_list h succ) (copy (logk_ruling_set h succ))
+      let ns =
         map (\i ->
-               if set'[i]
-               then (succ[i], i, nil, nil)
-               else if succ[i] != nil && set'[succ[i]]
-               then (i, nil, i, if succ[succ[i]] == nil then nil else succ[succ[succ[i]]])
-               else (nil, nil, nil, nil))
+               if small_set[i]
+               then succ[i]
+               else if succ[i] != nil && small_set[succ[i]]
+               then i
+               else nil)
             (indices succ)
-        |> unzip4
-      let succ = scatter succ ks ps
-      let set = scatter set (map (\j -> if j == nil then nil else is[j]) js') (rep true)
-      let set' = scatter set' js (rep true)
-      let keep = filter (\i -> not set'[i]) (indices succ)
+      let rs = map (\i -> if small_set[i] then i else nil) (indices succ)
+      let (js, ps) =
+        map (\i ->
+               if succ[i] != nil
+                  && succ[succ[i]] != nil
+                  && small_set[succ[succ[i]]]
+               && succ[succ[succ[i]]] != nil
+               then (i, succ[succ[succ[succ[i]]]])
+               else (nil, nil))
+            (indices succ)
+        |> unzip
+      let succ = scatter succ js ps
+      let set = scatter set (map (\j -> if j == nil then nil else is[j]) rs) (rep true)
+      let small_set = scatter small_set ns (rep true)
+      let keep = filter (\i -> not small_set[i]) (indices succ)
       let compressed = scatter (replicate (length succ) nil) keep (indices keep)
       let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) keep
       let is = map (\i -> is[i]) keep
@@ -121,3 +172,73 @@ def two_ruling_set [n] (h: i64) (succ: *[n]i64) : [n]bool =
   let set[h] = true
   let set[h_succ] = false
   in set
+
+module rng_engine = minstd_rand
+module rand_i32 = uniform_int_distribution i32 u32 rng_engine
+
+entry blocked_list (n: i64) (B: i64) =
+  let seed = 13632
+  let rng = rng_engine.rng_from_seed [seed]
+  let rngs = rng_engine.split_rng n rng
+  let keys =
+    map2 (\i rng ->
+            let x = i / B
+            let (_, y) = rand_i32.rand (0, i32.highest - 1) rng
+            in (u64.i64 x << 32) | (u64.i32 y))
+         (iota n)
+         rngs
+  let tmp = map (.1) (radix_sort_by_key (.0) u64.num_bits u64.get_bit (zip keys (iota n)))
+  let (idx, S) = zip tmp (rotate 1 tmp) |> unzip
+  let lst = scatter (replicate n 0) idx S
+  let h = lst[n - 1]
+  let lst[n - 1] = nil
+  in (h, lst)
+
+-- | Check if a subset of vertices forms a k-ruling set.
+def is_k_ruling_set [n] (k: i64) (succ: [n]i64) (selected: [n]bool) : bool =
+  let no_adjacent =
+    all (\i ->
+           if selected[i] && succ[i] != nil
+           then !selected[succ[i]]
+           else true)
+        (iota n)
+  let can_reach_within_k =
+    all (\start ->
+           let (found, _, _) =
+             loop (found, pos, steps) = (false, start, 0)
+             while !found && steps <= k && pos != nil do
+               if selected[pos]
+               then (true, pos, steps)
+               else (false, succ[pos], steps + 1)
+           in found)
+        (iota n)
+  in no_adjacent && can_reach_within_k
+
+-- ==
+-- entry: test_two_ruling_set test_logn_ruling_set
+-- "n=10000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
+-- "n=10000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
+-- "n=10000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
+-- "n=100000,s=1"    compiled nobench script input { blocked_list 100000i64 1i64 }  output { true }
+-- "n=100000,s=10"   compiled nobench script input { blocked_list 100000i64 10i64 } output { true }
+-- "n=100000,s=100"  compiled nobench script input { blocked_list 100000i64 100i64 } output { true }
+entry test_two_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
+  let ruling_set = two_ruling_set h succ
+  in is_k_ruling_set 2 succ ruling_set
+
+entry test_logn_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
+  let k = ceil_log2 n
+  let ruling_set = logk_ruling_set h succ
+  in is_k_ruling_set k succ ruling_set
+
+-- ==
+-- entry: test_blocked_list_valid
+-- "n=10000,s=1"     compiled nobench input { 10000i64 1i64 } output { true }
+-- "n=10000,s=10"    compiled nobench input { 10000i64 10i64 } output { true }
+-- "n=10000,s=100"   compiled nobench input { 10000i64 100i64 } output { true }
+-- "n=100000,s=1"    compiled nobench input { 100000i64 1i64 } output { true }
+-- "n=100000,s=10"   compiled nobench input { 100000i64 10i64 } output { true }
+-- "n=100000,s=100"  compiled nobench input { 100000i64 100i64 } output { true }
+entry test_blocked_list_valid (n: i64) (B: i64) : bool =
+  let (h, succ) = blocked_list n B
+  in is_valid_list h succ
