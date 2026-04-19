@@ -4,9 +4,6 @@
 
 import "blocked_list_ranking"
 import "common"
-import "lib/github.com/diku-dk/cpprandom/random"
-import "lib/github.com/diku-dk/sorts/radix_sort"
-import "lib/github.com/diku-dk/cpprandom/shuffle"
 
 module type list_ranking = {
   val list_ranking [n] : (h: i64) -> (S: [n]i64) -> [n]i32
@@ -41,11 +38,6 @@ module wyllie : list_ranking = {
         step R S
     in R
 }
-
-module rng_engine = minstd_rand
-module rand_i8 = uniform_int_distribution i8 u32 rng_engine
-module rand_i32 = uniform_int_distribution i32 u32 rng_engine
-module shuffle = mk_shuffle u64 xorshift128plus
 
 module random_mate_utils = {
   def hash (x: i32) : i32 =
@@ -295,28 +287,12 @@ module random_mate_optim : list_ranking = {
          in (scatter R RA_now updateR)
 }
 
-entry blocked_list (n: i64) (B: i64) =
-  let seed = 13632
-  let rng = rng_engine.rng_from_seed [seed]
-  let rngs = rng_engine.split_rng n rng
-  let keys =
-    map2 (\i rng ->
-            let x = i / B
-            let (_, y) = rand_i32.rand (0, i32.highest - 1) rng
-            in (u64.i64 x << 32) | (u64.i32 y))
-         (iota n)
-         rngs
-  let tmp = map (.1) (radix_sort_by_key (.0) u64.num_bits u64.get_bit (zip keys (iota n)))
-  let (idx, S) = zip tmp (rotate 1 tmp) |> unzip
-  let lst = scatter (replicate n 0) idx S
-  let h = lst[n - 1]
-  let lst[n - 1] = nil
-  in (h, lst)
-
 def mk_test list_ranking h S =
   let expected = wyllie.list_ranking h S
   let res = list_ranking h S
   in and (map2 (==) expected res)
+
+entry blocked_list = blocked_list
 
 -- ==
 -- entry: sequential_test random_mate_test random_mate_optim_test random_mate_example_test cole_vishkin_test
