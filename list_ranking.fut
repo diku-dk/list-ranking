@@ -201,7 +201,8 @@ module list_ranking_independent_set (S: state) : list_ranking = {
          let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) active
          let is = gather is active
          let rank = gather rank active
-         in (rank, succ, is, final_rank, final_succ, compressed[h], t + 1i64, removed, removed_offsets)
+         let h = compressed[h]
+         in (rank, succ, is, final_rank, final_succ, h, t + 1i64, removed, removed_offsets)
 
   def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
     let rank = replicate n 1i32

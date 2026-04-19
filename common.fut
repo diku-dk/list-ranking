@@ -3,6 +3,14 @@
 -- | Values for pointing to nothing.
 def nil : i64 = -1
 
+-- | Assert if the parent vector forms a valid list.
+def is_valid_list [n] (h: i64) (S: [n]i64) : bool =
+  let (final_node, count) =
+    loop (i, count) = (h, 0)
+    while 0 <= i && i < n && S[i] != nil && count < n do
+      (S[i], count + 1)
+  in count + 1 == n && S[final_node] == nil
+
 -- | Ceiled integer log2.
 def ceil_log2 (a: i64) : i64 =
   i64.i32 (i64.num_bits - i64.clz (a - 1))
@@ -92,7 +100,7 @@ def two_ruling_set [n] (h: i64) (succ: *[n]i64) : [n]bool =
   let (set, _, _, _) =
     loop (set, h, succ, is)
     while 1 < length succ do
-      let set' = copy (logn_ruling_set h succ)
+      let set' = assert (is_valid_list h succ) (copy (logn_ruling_set h succ))
       let (js, js', ks, ps) =
         map (\i ->
                if set'[i]
