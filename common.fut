@@ -8,11 +8,12 @@ def nil : i64 = -1
 
 -- | Assert if the parent vector forms a valid list.
 def is_valid_list [n] (h: i64) (S: [n]i64) : bool =
-  let (final_node, count) =
-    loop (i, count) = (h, 0)
-    while 0 <= i && i < n && S[i] != nil && count < n do
-      (S[i], count + 1)
-  in count + 1 == n && S[final_node] == nil
+  let (final_node, visited) =
+    loop (i, visited) = (h, replicate n false)
+    while 0 <= i && i < n && not visited[i] && S[i] != nil do
+      (S[i], visited with [i] = true)
+  let visited[final_node] = true
+  in S[final_node] == nil && and visited
 
 -- | Ceiled integer log2.
 def ceil_log2 (a: i64) : i64 =
@@ -130,8 +131,15 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let h_succ = succ[h]
   let (set, _, _, _) =
     loop (set, h, succ, is)
-    while 1 < length succ do
-      let small_set = assert (is_valid_list h succ) (copy (logk_ruling_set h succ))
+    while 3 < length succ do
+      let small_set =
+        assert (is_valid_list h succ)
+        (copy (map2 (\i s ->
+                       if i == h || i == succ[h]
+                       then false
+                       else s)
+                    (indices succ)
+                    (logk_ruling_set h succ)))
       let ns =
         map (\i ->
                if small_set[i]
@@ -141,20 +149,13 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
                else nil)
             (indices succ)
       let rs = map (\i -> if small_set[i] then i else nil) (indices succ)
-      let (js, ps) =
-        map (\i ->
-               if succ[i] != nil
-                  && succ[succ[i]] != nil
-                  && small_set[succ[succ[i]]]
-               && succ[succ[succ[i]]] != nil
-               then (i, succ[succ[succ[succ[i]]]])
-               else (nil, nil))
-            (indices succ)
-        |> unzip
-      let succ = scatter succ js ps
       let set = scatter set (map (\j -> if j == nil then nil else is[j]) rs) (rep true)
       let small_set = scatter small_set ns (rep true)
       let keep = filter (\i -> not small_set[i]) (indices succ)
+      let succ =
+        map (\i ->
+               loop i while i != nil && small_set[i] do succ[i])
+            succ
       let compressed = scatter (replicate (length succ) nil) keep (indices keep)
       let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) keep
       let is = map (\i -> is[i]) keep
