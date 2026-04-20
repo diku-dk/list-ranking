@@ -128,8 +128,7 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let set = rep false
   let is = iota n
   let succ = copy succ
-  let h_succ = succ[h]
-  let (set, _, _, _) =
+  let (set, h, succ, is) =
     loop (set, h, succ, is)
     while 3 < length succ do
       let small_set =
@@ -160,8 +159,13 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
       let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) keep
       let is = map (\i -> is[i]) keep
       in (set, compressed[h], succ, is)
-  let set[h] = true
-  let set[h_succ] = false
+  let set =
+    if length is == 3
+    then let set[is[h]] = true
+         let set[is[succ[succ[h]]]] = true
+         in set
+    else let set[is[h]] = true
+         in set
   in set
 
 module rng_engine = minstd_rand

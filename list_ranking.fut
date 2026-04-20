@@ -316,7 +316,7 @@ entry cole_vishkin_test = mk_test cole_vishkin.list_ranking
 entry sequential_bench = sequential.list_ranking
 
 -- ==
--- entry: wyllie_bench random_mate_bench random_mate_optim_bench random_mate_example_bench
+-- entry: wyllie_bench random_mate_bench random_mate_optim_bench random_mate_example_bench cole_vishkin_bench
 -- compiled notest script input { blocked_list 20000000i64 1i64 }
 -- compiled notest script input { blocked_list 20000000i64 10i64 }
 -- compiled notest script input { blocked_list 20000000i64 100i64 }
@@ -329,6 +329,7 @@ entry wyllie_bench = wyllie.list_ranking
 entry random_mate_example_bench = random_mate_example.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_optim_bench = random_mate_optim.list_ranking
+entry cole_vishkin_bench = cole_vishkin.list_ranking
 
 entry average_stride [n] (S: [n]i64) =
   map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
