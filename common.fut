@@ -48,27 +48,17 @@ def lsb_diff (a: i64) (b: i64) : i8 =
   then -1
   else a ^ b |> i64.ctz |> i8.i32
 
--- | Least Significant Bit Difference (e.g. lsb 0b0101 0b0001 == 2 )
-def lsb_diff_i8 (a: i8) (b: i8) : i8 =
-  if a == b
-  then -1
-  else a ^ b |> i8.ctz |> i8.i32
-
 -- | An initial n-coloring of a list.
 def init_color (n: i64) : [n]i64 = iota n
 
 -- | A log k-coloring constructed from a list and a k-coloring and a
 -- list.
 def logk_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
-  tabulate n (\i -> if succ[i] == nil then 0 else lsb_diff color[i] color[succ[i]])
+  tabulate n (\i -> lsb_diff color[i] color[succ[i]])
 
 -- | The different found in lsb_diff.
 def bit (v: i64) (b: i8) : i8 =
   i8.i64 ((v >> i64.i8 b) & 1)
-
--- | The different found in lsb_diff.
-def bit_i8 (v: i8) (b: i8) : i8 =
-  (v >> b) & 1
 
 def predecessor [n] (succ: [n]i64) : [n]i64 =
   scatter (rep nil) succ (iota n)
@@ -207,7 +197,7 @@ def is_k_ruling_set [n] (k: i64) (succ: [n]i64) (selected: [n]bool) : bool =
            let (found, _, _) =
              loop (found, pos, steps) = (false, start, 0)
              while !found && steps <= k && pos != nil do
-               if selected[pos]
+               if selected[pos] || succ[pos] == -1
                then (true, pos, steps)
                else (false, succ[pos], steps + 1)
            in found)
