@@ -1,4 +1,6 @@
 list_ranking
+common
+blocked_list_ranking
 data
 lib
 *.actual
