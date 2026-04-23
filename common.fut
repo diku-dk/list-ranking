@@ -262,7 +262,7 @@ def logn_bucket_sort 'a [n] (is: [n]i8) (as: [n]a) : ([n]i8, [n]a) =
     let block_is = is[start:end]
     in loop (rank, count)
        for (j, i) in zip (indices block_is) block_is do
-         let rank[j] = count[i]
+         let rank[j] = i8.i64 count[i]
          let count[i] = count[i] + 1
          in (rank, count)
   let (ranks, counts) =
@@ -279,7 +279,7 @@ def logn_bucket_sort 'a [n] (is: [n]i8) (as: [n]a) : ([n]i8, [n]a) =
   let positions =
     tabulate n (\i ->
                   let block_id = i / block_size
-                  in offsets[block_id][is[i]] + flat_ranks[i])
+                  in offsets[block_id][is[i]] + i64.i8 flat_ranks[i])
   let sorted_is = scatter (replicate n 0i8) positions is
   let sorted_as = scatter (#[scratch] replicate n as[0]) positions as
   in (sorted_is, sorted_as)
