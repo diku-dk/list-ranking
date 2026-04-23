@@ -257,8 +257,8 @@ def logn_bucket_sort 'a [n] (is: [n]i8) (as: [n]a) : ([n]i8, [n]a) =
   let count_group block_i =
     let start = block_i * block_size
     let end = i64.min n ((block_i + 1) * block_size)
-    let rank = replicate block_size (-1)
-    let count = replicate block_size 0
+    let rank = replicate block_size (-1i8)
+    let count = replicate block_size 0i64
     let block_is = is[start:end]
     in loop (rank, count)
        for (j, i) in zip (indices block_is) block_is do
