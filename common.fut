@@ -49,6 +49,11 @@ def lsb_diff (a: i64) (b: i64) : i8 =
   then -1
   else a ^ b |> i64.ctz |> i8.i32
 
+def lsb_diff_i8 (a: i8) (b: i8) : i8 =
+  if a == b
+  then -1
+  else a ^ b |> i8.ctz |> i8.i32
+
 -- | An initial n-coloring of a list.
 def init_color (n: i64) : [n]i64 = iota n
 
@@ -61,6 +66,13 @@ def logk_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
 def bit (v: i64) (b: i8) : i8 =
   i8.i64 ((v >> i64.i8 b) & 1)
 
+def logk_coloring_i8 [n] (color: [n]i8) (succ: [n]i64) : [n]i8 =
+  tabulate n (\i -> lsb_diff_i8 color[i] color[succ[i]])
+
+-- | The different found in lsb_diff.
+def bit_i8 (v: i8) (b: i8) : i8 =
+  (v >> b) & 1
+
 def predecessor [n] (succ: [n]i64) : [n]i64 =
   scatter (rep nil) succ (iota n)
 
@@ -71,12 +83,13 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let pred = copy pred with [h] = l
   let color0 = init_color n
   let color1 = logk_coloring color0 succ
-  let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
-  let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
+  let color2 = logk_coloring_i8 color1 succ
+  let is_local_min = tabulate n (\i -> color2[pred[i]] >= color2[i] && color2[i] <= color2[succ[i]])
+  let is_local_max = tabulate n (\i -> color2[pred[i]] <= color2[i] && color2[i] >= color2[succ[i]])
   let selected =
     tabulate n (\i ->
                   let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
-                  let coin = bit color0[i] color1[i]
+                  let coin = bit color0[i] color2[i]
                   in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
   let available =
     tabulate n (\i ->
@@ -87,7 +100,7 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let selected' =
     tabulate n (\i ->
                   let neighbor_is_available = available[pred[i]] || available[succ[i]]
-                  let coin = bit color0[i] color1[i]
+                  let coin = bit color0[i] color2[i]
                   in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
   in selected'
 
@@ -95,17 +108,17 @@ def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let l = end succ
   let succ = copy succ with [l] = h
   let color0 = init_color n
-  let color1 = logk_coloring color0 succ
+  let color2 = logk_coloring color0 succ
   let is_local_min =
-    tabulate n (\i -> color1[i] >= color1[succ[i]] && color1[succ[i]] <= color1[succ[succ[i]]])
+    tabulate n (\i -> color2[i] >= color2[succ[i]] && color2[succ[i]] <= color2[succ[succ[i]]])
     |> scatter (replicate n false) (rotate 1 (iota n))
   let is_local_max =
-    tabulate n (\i -> color1[i] <= color1[succ[i]] && color1[succ[i]] >= color1[succ[succ[i]]])
+    tabulate n (\i -> color2[i] <= color2[succ[i]] && color2[succ[i]] >= color2[succ[succ[i]]])
     |> scatter (replicate n false) (rotate 1 (iota n))
   let selected =
     tabulate n (\i ->
                   let neighbor_is_local_min = is_local_min[i] || is_local_min[succ[succ[i]]]
-                  let coin = bit color0[succ[i]] color1[succ[i]]
+                  let coin = bit color0[succ[i]] color2[succ[i]]
                   in is_local_min[succ[i]] && ((not neighbor_is_local_min) || coin == 1))
     |> scatter (replicate n false) (rotate 1 (iota n))
   let available =
@@ -118,12 +131,12 @@ def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let selected' =
     tabulate n (\i ->
                   let neighbor_is_available = available[i] || available[succ[succ[i]]]
-                  let coin = bit color0[succ[i]] color1[succ[i]]
+                  let coin = bit color0[succ[i]] color2[succ[i]]
                   in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
     |> scatter (replicate n false) (rotate 1 (iota n))
   in selected'
 
--- | Construct a log n-ruling set.
+-- | Construct a 2-ruling set.
 def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let set = rep false
   let is = iota n
@@ -237,3 +250,73 @@ entry test_logn_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
 entry test_blocked_list_valid (n: i64) (B: i64) : bool =
   let (h, succ) = blocked_list n B
   in is_valid_list h succ
+
+def logn_bucket_sort 'a [n] (is: [n]i8) (as: [n]a) : ([n]i8, [n]a) =
+  let block_size = ceil_log2 n
+  let block_num = (n + block_size - 1) / block_size
+  let count_group block_i =
+    let start = block_i * block_size
+    let end = i64.min n ((block_i + 1) * block_size)
+    let rank = replicate block_size (-1)
+    let count = replicate block_size 0
+    let block_is = is[start:end]
+    in loop (rank, count)
+       for (j, i) in zip (indices block_is) block_is do
+         let rank[j] = count[i]
+         let count[i] = count[i] + 1
+         in (rank, count)
+  let (ranks, counts) =
+    tabulate block_num count_group
+    |> unzip
+  let counts = transpose counts |> flatten
+  let offsets =
+    counts
+    |> scan (+) 0
+    |> flip (map2 (-)) counts
+    |> unflatten
+    |> transpose
+  let flat_ranks = flatten ranks
+  let positions =
+    tabulate n (\i ->
+                  let block_id = i / block_size
+                  in offsets[block_id][is[i]] + flat_ranks[i])
+  let sorted_is = scatter (replicate n 0i8) positions is
+  let sorted_as = scatter (#[scratch] replicate n as[0]) positions as
+  in (sorted_is, sorted_as)
+
+module rand_i8 = uniform_int_distribution i8 u32 rng_engine
+
+def is_sorted [n] (arr: [n]i8) : bool =
+  all (\i -> i == n - 1 || arr[i] <= arr[i + 1]) (iota n)
+
+def is_stable [n] (sorted_keys: [n]i8) (sorted_indices: [n]i64) : bool =
+  all (\i ->
+         i == n - 1
+         || sorted_keys[i] != sorted_keys[i + 1]
+         || sorted_indices[i] < sorted_indices[i + 1])
+      (iota n)
+
+def gen_random_keys (n: i64) (seed: i32) : [n]i8 =
+  let log_n = i64.max 1 (ceil_log2 n)
+  let max_val = i8.i64 (log_n - 1)
+  let rng = rng_engine.rng_from_seed [seed]
+  let rngs = rng_engine.split_rng n rng
+  in map (\r -> (rand_i8.rand (0, max_val) r).1) rngs
+
+-- ==
+-- entry: test_logn_bucket_sort
+-- input { 8i64 42i32 }
+-- output { true true }
+-- input { 100i64 123i32 }
+-- output { true true }
+-- input { 1000i64 999i32 }
+-- output { true true }
+-- input { 10000i64 55555i32 }
+-- output { true true }
+entry test_logn_bucket_sort (n: i64) (seed: i32) : (bool, bool) =
+  let keys = gen_random_keys n seed
+  let values = iota n
+  let (sorted_keys, sorted_values) = logn_bucket_sort keys values
+  let sorted = is_sorted sorted_keys
+  let stable = is_stable sorted_keys sorted_values
+  in (sorted, stable)
