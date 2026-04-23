@@ -251,22 +251,22 @@ entry test_blocked_list_valid (n: i64) (B: i64) : bool =
   let (h, succ) = blocked_list n B
   in is_valid_list h succ
 
-def logn_bucket_sort 'a [n] (is: [n]i8) (as: [n]a) : ([n]i8, [n]a) =
+def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ([n]i8, [n]a) =
   let block_size = ceil_log2 n
   let block_num = (n + block_size - 1) / block_size
-  let count_group block_i =
+  let block_count block_i =
     let start = block_i * block_size
     let end = i64.min n ((block_i + 1) * block_size)
     let rank = replicate block_size (-1i8)
     let count = replicate block_size 0i64
-    let block_is = is[start:end]
+    let block_keys = keys[start:end]
     in loop (rank, count)
-       for (j, i) in zip (indices block_is) block_is do
+       for (j, i) in zip (indices block_keys) block_keys do
          let rank[j] = i8.i64 count[i]
          let count[i] = count[i] + 1
          in (rank, count)
   let (ranks, counts) =
-    tabulate block_num count_group
+    tabulate block_num block_count
     |> unzip
   let counts = transpose counts |> flatten
   let offsets =
@@ -276,13 +276,13 @@ def logn_bucket_sort 'a [n] (is: [n]i8) (as: [n]a) : ([n]i8, [n]a) =
     |> unflatten
     |> transpose
   let flat_ranks = flatten ranks
-  let positions =
+  let is =
     tabulate n (\i ->
                   let block_id = i / block_size
-                  in offsets[block_id][is[i]] + i64.i8 flat_ranks[i])
-  let sorted_is = scatter (replicate n 0i8) positions is
-  let sorted_as = scatter (#[scratch] replicate n as[0]) positions as
-  in (sorted_is, sorted_as)
+                  in offsets[block_id][keys[i]] + i64.i8 flat_ranks[i])
+  let sorted_keys = scatter (replicate n 0i8) is keys
+  let sorted_values = scatter (#[scratch] replicate n values[0]) is values
+  in (sorted_keys, sorted_values)
 
 module rand_i8 = uniform_int_distribution i8 u32 rng_engine
 
