@@ -37,7 +37,7 @@ def find_index 'a [n] (p: a -> bool) (as: [n]a) : i64 =
     else if y
     then (y, j)
     else (x, i)
-  in (reduce_comm op (false, -1) (zip (map p as) (iota n))).1
+  in (reduce_comm op (false, nil) (zip (map p as) (iota n))).1
 
 -- | Find the end of list.
 def end [n] (succ: [n]i64) : i64 =
@@ -83,13 +83,12 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let pred = copy pred with [h] = l
   let color0 = init_color n
   let color1 = logk_coloring color0 succ
-  let color2 = logk_coloring_i8 color1 succ
-  let is_local_min = tabulate n (\i -> color2[pred[i]] >= color2[i] && color2[i] <= color2[succ[i]])
-  let is_local_max = tabulate n (\i -> color2[pred[i]] <= color2[i] && color2[i] >= color2[succ[i]])
+  let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
+  let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
   let selected =
     tabulate n (\i ->
                   let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
-                  let coin = bit color0[i] color2[i]
+                  let coin = bit color0[i] color1[i]
                   in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
   let available =
     tabulate n (\i ->
@@ -100,7 +99,7 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let selected' =
     tabulate n (\i ->
                   let neighbor_is_available = available[pred[i]] || available[succ[i]]
-                  let coin = bit color0[i] color2[i]
+                  let coin = bit color0[i] color1[i]
                   in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
   in selected'
 
@@ -136,49 +135,90 @@ def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
     |> scatter (replicate n false) (rotate 1 (iota n))
   in selected'
 
+def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ?[m].([m]i64, [n]i8, [n]a) =
+  let block_size = ceil_log2 n
+  let block_num = (n + block_size - 1) / block_size
+  let block_count block_i =
+    let start = block_i * block_size
+    let end = i64.min n ((block_i + 1) * block_size)
+    let rank = replicate block_size (-1i8)
+    let count = replicate block_size 0i64
+    let block_keys = keys[start:end]
+    in loop (rank, count)
+       for (j, i) in zip (indices block_keys) block_keys do
+         let rank[j] = i8.i64 count[i]
+         let count[i] = count[i] + 1
+         in (rank, count)
+  let (ranks, counts) =
+    tabulate block_num block_count
+    |> unzip
+  let counts = transpose counts |> flatten
+  let exprefix_sum =
+    counts
+    |> scan (+) 0
+    |> flip (map2 (-)) counts
+  let js =
+    map (\i -> if i % block_num == 0 then i / block_num else nil)
+        (indices exprefix_sum)
+  let seg_offsets =
+    scatter (replicate block_size 0)
+            js
+            exprefix_sum
+  let offsets =
+    unflatten exprefix_sum
+    |> transpose
+  let flat_ranks = flatten ranks
+  let is =
+    tabulate n (\i ->
+                  let block_id = i / block_size
+                  in offsets[block_id][keys[i]] + i64.i8 flat_ranks[i])
+  let sorted_keys = scatter (#[scratch] replicate n keys[0]) is keys
+  let sorted_values = scatter (#[scratch] replicate n values[0]) is values
+  let seg_offsets_is =
+    #[sequential] filter (\i -> i == 0 || seg_offsets[i - 1] != seg_offsets[i]) (indices seg_offsets)
+  let seg_offsets = map (\i -> seg_offsets[i]) seg_offsets_is
+  in (seg_offsets, sorted_keys, sorted_values)
+
 -- | Construct a 2-ruling set.
 def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
-  let set = rep false
-  let is = iota n
-  let succ = copy succ
-  let (set, h, succ, is) =
-    loop (set, h, succ, is)
-    while 3 < length succ do
-      let small_set =
-        assert (is_valid_list h succ)
-        (copy (map2 (\i s ->
-                       if i == h || i == succ[h]
-                       then false
-                       else s)
-                    (indices succ)
-                    (logk_ruling_set h succ)))
-      let ns =
-        map (\i ->
-               if small_set[i]
-               then succ[i]
-               else if succ[i] != nil && small_set[succ[i]]
-               then i
-               else nil)
-            (indices succ)
-      let rs = map (\i -> if small_set[i] then i else nil) (indices succ)
-      let set = scatter set (map (\j -> if j == nil then nil else is[j]) rs) (rep true)
-      let small_set = scatter small_set ns (rep true)
-      let keep = filter (\i -> not small_set[i]) (indices succ)
-      let succ =
-        map (\i ->
-               loop i while i != nil && small_set[i] do succ[i])
-            succ
-      let compressed = scatter (replicate (length succ) nil) keep (indices keep)
-      let succ = map (\a -> if succ[a] == nil then nil else compressed[succ[a]]) keep
-      let is = map (\i -> is[i]) keep
-      in (set, compressed[h], succ, is)
+  let pred = predecessor succ
+  let l = end succ
+  let succ = copy succ with [l] = h
+  let pred = copy pred with [h] = l
+  let color0 = init_color n
+  let color1 = logk_coloring color0 succ
+  let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
+  let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
+  let selected =
+    tabulate n (\i ->
+                  let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
+                  let coin = bit color0[i] color1[i]
+                  in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
+  let available =
+    tabulate n (\i ->
+                  not selected[i]
+                  && not selected[pred[i]]
+                  && not selected[succ[i]]
+                  && is_local_max[i])
   let set =
-    if length is == 3
-    then let set[is[h]] = true
-         let set[is[succ[succ[h]]]] = true
-         in set
-    else let set[is[h]] = true
-         in set
+    tabulate n (\i ->
+                  let neighbor_is_available = available[pred[i]] || available[succ[i]]
+                  let coin = bit color0[i] color1[i]
+                  in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
+  let (offsets, _, is) = #[trace] logn_bucket_sort color1 (iota n)
+  let spans =
+    indices offsets
+    |> map (\i ->
+              if i == length offsets - 1
+              then (offsets[i], n)
+              else (offsets[i], offsets[i + 1]))
+  let set =
+    loop set
+    for (start, end) in spans do
+      let js = is[start:end]
+      let flags = map (\j -> not set[succ[j]] && not set[pred[j]]) js
+      let set = scatter set (map2 (\f j -> if f then j else nil) flags js) (rep true)
+      in set
   in set
 
 module rng_engine = minstd_rand
@@ -215,7 +255,7 @@ def is_k_ruling_set [n] (k: i64) (succ: [n]i64) (selected: [n]bool) : bool =
            let (found, _, _) =
              loop (found, pos, steps) = (false, start, 0)
              while !found && steps <= k && pos != nil do
-               if selected[pos] || succ[pos] == -1
+               if selected[pos] || succ[pos] == nil
                then (true, pos, steps)
                else (false, succ[pos], steps + 1)
            in found)
@@ -251,39 +291,6 @@ entry test_blocked_list_valid (n: i64) (B: i64) : bool =
   let (h, succ) = blocked_list n B
   in is_valid_list h succ
 
-def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ([n]i8, [n]a) =
-  let block_size = ceil_log2 n
-  let block_num = (n + block_size - 1) / block_size
-  let block_count block_i =
-    let start = block_i * block_size
-    let end = i64.min n ((block_i + 1) * block_size)
-    let rank = replicate block_size (-1i8)
-    let count = replicate block_size 0i64
-    let block_keys = keys[start:end]
-    in loop (rank, count)
-       for (j, i) in zip (indices block_keys) block_keys do
-         let rank[j] = i8.i64 count[i]
-         let count[i] = count[i] + 1
-         in (rank, count)
-  let (ranks, counts) =
-    tabulate block_num block_count
-    |> unzip
-  let counts = transpose counts |> flatten
-  let offsets =
-    counts
-    |> scan (+) 0
-    |> flip (map2 (-)) counts
-    |> unflatten
-    |> transpose
-  let flat_ranks = flatten ranks
-  let is =
-    tabulate n (\i ->
-                  let block_id = i / block_size
-                  in offsets[block_id][keys[i]] + i64.i8 flat_ranks[i])
-  let sorted_keys = scatter (replicate n 0i8) is keys
-  let sorted_values = scatter (#[scratch] replicate n values[0]) is values
-  in (sorted_keys, sorted_values)
-
 module rand_i8 = uniform_int_distribution i8 u32 rng_engine
 
 def is_sorted [n] (arr: [n]i8) : bool =
@@ -316,7 +323,7 @@ def gen_random_keys (n: i64) (seed: i32) : [n]i8 =
 entry test_logn_bucket_sort (n: i64) (seed: i32) : (bool, bool) =
   let keys = gen_random_keys n seed
   let values = iota n
-  let (sorted_keys, sorted_values) = logn_bucket_sort keys values
+  let (_, sorted_keys, sorted_values) = logn_bucket_sort keys values
   let sorted = is_sorted sorted_keys
   let stable = is_stable sorted_keys sorted_values
   in (sorted, stable)
