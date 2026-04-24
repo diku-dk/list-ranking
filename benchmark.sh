@@ -2,7 +2,6 @@
 #SBATCH -p gpu
 #SBATCH --gres=gpu:a100
 #SBATCH --mem=32G
-#SBATCH --exclusive
 #SBATCH --time=0:30:00
 
 module unload cuda
