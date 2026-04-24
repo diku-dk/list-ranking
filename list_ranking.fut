@@ -164,7 +164,7 @@ module random_mate : list_ranking =
   list_ranking_independent_set (random_mate_state {def is_base_case _ _ = false})
 
 module random_mate_bounded : list_ranking =
-  list_ranking_independent_set (random_mate_state {def is_base_case m n = m < n / floor_log2 n})
+  list_ranking_independent_set (random_mate_state {def is_base_case m n = m < n / 100000i64})
 
 module cole_vishkin_state (B: {val is_base_case : i64 -> i64 -> bool}) : state = {
   type^ s = ?[n].[n]bool
@@ -179,7 +179,7 @@ module cole_vishkin : list_ranking =
   list_ranking_independent_set (cole_vishkin_state {def is_base_case _ _ = false})
 
 module cole_vishkin_bounded : list_ranking =
-  list_ranking_independent_set (cole_vishkin_state {def is_base_case m n = m < n / floor_log2 n})
+  list_ranking_independent_set (cole_vishkin_state {def is_base_case m n = m < n / 100000i64})
 
 def mk_test list_ranking h S =
   let expected = wyllie.list_ranking h S
