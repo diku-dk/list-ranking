@@ -181,45 +181,49 @@ def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ?[m].([m]i64, [n]i8, 
 
 -- | Construct a 2-ruling set.
 def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
-  let pred = predecessor succ
-  let l = end succ
-  let succ = copy succ with [l] = h
-  let pred = copy pred with [h] = l
-  let color0 = init_color n
-  let color1 = logk_coloring color0 succ
-  let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
-  let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
-  let selected =
-    tabulate n (\i ->
-                  let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
-                  let coin = bit color0[i] color1[i]
-                  in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
-  let available =
-    tabulate n (\i ->
-                  not selected[i]
-                  && not selected[pred[i]]
-                  && not selected[succ[i]]
-                  && is_local_max[i])
-  let set =
-    tabulate n (\i ->
-                  let neighbor_is_available = available[pred[i]] || available[succ[i]]
-                  let coin = bit color0[i] color1[i]
-                  in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
-  let (offsets, _, is) = #[trace] logn_bucket_sort color1 (iota n)
-  let spans =
-    indices offsets
-    |> map (\i ->
-              if i == length offsets - 1
-              then (offsets[i], n)
-              else (offsets[i], offsets[i + 1]))
-  let set =
-    loop set
-    for (start, end) in spans do
-      let js = is[start:end]
-      let flags = map (\j -> not set[succ[j]] && not set[pred[j]]) js
-      let set = scatter set (map2 (\f j -> if f then j else nil) flags js) (rep true)
-      in set
-  in set
+  if n == 1
+  then replicate n true
+  else if n == 2
+  then (replicate n false) with [h] = true
+  else let pred = predecessor succ
+       let l = end succ
+       let succ = copy succ with [l] = h
+       let pred = copy pred with [h] = l
+       let color0 = init_color n
+       let color1 = logk_coloring color0 succ
+       let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
+       let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
+       let selected =
+         tabulate n (\i ->
+                       let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
+                       let coin = bit color0[i] color1[i]
+                       in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
+       let available =
+         tabulate n (\i ->
+                       not selected[i]
+                       && not selected[pred[i]]
+                       && not selected[succ[i]]
+                       && is_local_max[i])
+       let set =
+         tabulate n (\i ->
+                       let neighbor_is_available = available[pred[i]] || available[succ[i]]
+                       let coin = bit color0[i] color1[i]
+                       in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
+       let (offsets, _, is) = logn_bucket_sort color1 (iota n)
+       let spans =
+         indices offsets
+         |> map (\i ->
+                   if i == length offsets - 1
+                   then (offsets[i], n)
+                   else (offsets[i], offsets[i + 1]))
+       let set =
+         loop set
+         for (start, end) in spans do
+           let js = is[start:end]
+           let flags = map (\j -> not set[succ[j]] && not set[pred[j]]) js
+           let set = scatter set (map2 (\f j -> if f then j else nil) flags js) (rep true)
+           in set
+       in set
 
 module rng_engine = minstd_rand
 module rand_i32 = uniform_int_distribution i32 u32 rng_engine
