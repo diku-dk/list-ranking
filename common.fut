@@ -49,11 +49,6 @@ def lsb_diff (a: i64) (b: i64) : i8 =
   then -1
   else a ^ b |> i64.ctz |> i8.i32
 
-def lsb_diff_i8 (a: i8) (b: i8) : i8 =
-  if a == b
-  then -1
-  else a ^ b |> i8.ctz |> i8.i32
-
 -- | An initial n-coloring of a list.
 def init_color (n: i64) : [n]i64 = iota n
 
@@ -66,13 +61,8 @@ def logk_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
 def bit (v: i64) (b: i8) : i8 =
   i8.i64 ((v >> i64.i8 b) & 1)
 
-def logk_coloring_i8 [n] (color: [n]i8) (succ: [n]i64) : [n]i8 =
-  tabulate n (\i -> lsb_diff_i8 color[i] color[succ[i]])
-
--- | The different found in lsb_diff.
-def bit_i8 (v: i8) (b: i8) : i8 =
-  (v >> b) & 1
-
+-- | Inverts a successor parent vector such that the pointer point in
+-- the opposite direction.
 def predecessor [n] (succ: [n]i64) : [n]i64 =
   scatter (rep nil) succ (iota n)
 
@@ -135,6 +125,8 @@ def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
     |> scatter (replicate n false) (rotate 1 (iota n))
   in selected'
 
+-- | Work efficient bucket sort with log n buckets, it does O(n) work
+-- and has O(log n) span.
 def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ?[m].([m]i64, [n]i8, [n]a) =
   let block_size = ceil_log2 n
   let block_num = (n + block_size - 1) / block_size

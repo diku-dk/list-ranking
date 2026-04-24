@@ -39,25 +39,42 @@ module wyllie : list_ranking = {
     in R
 }
 
-module type state = {
+-- | Module for computing independent sets of lists.
+--
+-- A independent set is a set of nodes from the list that have no
+-- edges in common.
+module type independent_set = {
+  -- | The type of the set.
   type^ s
-  val get_rulers [n] : (t: i64) -> (h: i64) -> (succ: [n]i64) -> *s
-  val is_ruler : s -> i64 -> bool
+
+  -- | Construction of a independent set from a time stamp, head node,
+  -- and a parent vector.
+  val get_independent_set [n] : (t: i64) -> (h: i64) -> (succ: [n]i64) -> *s
+
+  --| Check if a node of the list is a member in the independent set.
+  val is_member : s -> i64 -> bool
+
+  -- | Check if the list is smalle enough to default to wyllies list
+  -- ranking algorithm. The arguments given is the current list length
+  -- and the list length originally.
   val is_base_case : i64 -> i64 -> bool
 }
 
-module list_ranking_independent_set (S: state) : list_ranking = {
+-- | Given a module for constructing a independent set create a list
+-- ranking module.
+module list_ranking_independent_set (S: independent_set) : list_ranking = {
   type^ s = S.s
 
   #[inline]
-  def is_ruler = S.is_ruler
+  def get_independent_set = S.get_independent_set
 
   #[inline]
-  def get_rulers = S.get_rulers
+  def is_member = S.is_member
 
   #[inline]
   def is_base_case = S.is_base_case
 
+  #[gather]
   def gather [n] [m] 'a (as: [n]a) (is: [m]i64) =
     map (\i -> as[i]) is
 
@@ -94,8 +111,8 @@ module list_ranking_independent_set (S: state) : list_ranking = {
     else if length succ == 1
     then let final_rank[is[0]] = rank[0]
          in ([], [], [], final_rank, final_succ, h, t, removed, removed_offsets)
-    else let state = get_rulers t h succ
-         let active = tabulate m (is_ruler state)
+    else let set = get_independent_set t h succ
+         let active = tabulate m (is_member set)
          let update i a r s =
            if succ[i] == nil
            then (r, s, nil)
@@ -141,9 +158,10 @@ module list_ranking_independent_set (S: state) : list_ranking = {
          in scatter rank is rs
 }
 
-module random_mate_state (B: {val is_base_case : i64 -> i64 -> bool}) : state = {
+-- | A module for performing random mate.
+module random_mate_state (B: {val is_base_case : i64 -> i64 -> bool}) : independent_set = {
   type^ s = ?[n].[n]bool
-  def is_ruler [n] (s: [n]bool) (i: i64) : bool = s[i]
+  def is_member [n] (s: [n]bool) (i: i64) : bool = s[i]
   def is_base_case = B.is_base_case
 
   def hash (x: i32) : i32 =
@@ -153,7 +171,7 @@ module random_mate_state (B: {val is_base_case : i64 -> i64 -> bool}) : state = 
     let x = ((x >> 16) ^ x)
     in i32.u32 x
 
-  def get_rulers [n] (t: i64) (_: i64) (succ: [n]i64) : *[n]bool =
+  def get_independent_set [n] (t: i64) (_: i64) (succ: [n]i64) : *[n]bool =
     let flip i = hash (i32.i64 (i ^ t)) % 2 == 0
     in map (\i ->
               flip i && not (flip succ[i]))
@@ -166,12 +184,13 @@ module random_mate : list_ranking =
 module random_mate_bounded : list_ranking =
   list_ranking_independent_set (random_mate_state {def is_base_case m n = m < n / floor_log2 n})
 
-module cole_vishkin_state (B: {val is_base_case : i64 -> i64 -> bool}) : state = {
+-- | A module for performing Cole/Vishkin's list ranking algorithm.
+module cole_vishkin_state (B: {val is_base_case : i64 -> i64 -> bool}) : independent_set = {
   type^ s = ?[n].[n]bool
-  def is_ruler [n] (s: [n]bool) (i: i64) : bool = s[i]
+  def is_member [n] (s: [n]bool) (i: i64) : bool = s[i]
   def is_base_case = B.is_base_case
 
-  def get_rulers [n] (_: i64) (h: i64) (succ: [n]i64) : *[n]bool =
+  def get_independent_set [n] (_: i64) (h: i64) (succ: [n]i64) : *[n]bool =
     two_ruling_set h (copy succ)
 }
 
