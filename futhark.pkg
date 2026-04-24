@@ -1,4 +1,5 @@
 require {
   github.com/diku-dk/cpprandom 1.4.1 #c95459a4f362a56293cbefe71ef8dcb78b7a333e
   github.com/diku-dk/sorts 0.6.1 #c14558b77a63526e96c6e5d71cba3ff0ccc918f5
+  github.com/diku-dk/containers 0.10.6 #ca88377cede09b90263642961b7d3ccc679d919c
 }
