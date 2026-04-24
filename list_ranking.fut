@@ -317,14 +317,15 @@ entry sequential_bench = sequential.list_ranking
 
 -- ==
 -- entry: wyllie_bench random_mate_bench random_mate_optim_bench random_mate_example_bench cole_vishkin_bench
--- compiled notest script input { blocked_list 20000000i64 1i64 }
--- compiled notest script input { blocked_list 20000000i64 10i64 }
--- compiled notest script input { blocked_list 20000000i64 100i64 }
--- compiled notest script input { blocked_list 20000000i64 1000i64 }
--- compiled notest script input { blocked_list 20000000i64 10000i64 }
--- compiled notest script input { blocked_list 20000000i64 100000i64 }
--- compiled notest script input { blocked_list 20000000i64 1000000i64 }
--- compiled notest script input { blocked_list 20000000i64 10000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 1i64 }
+-- compiled notest script input { blocked_list 100000000i64 10i64 }
+-- compiled notest script input { blocked_list 100000000i64 100i64 }
+-- compiled notest script input { blocked_list 100000000i64 1000i64 }
+-- compiled notest script input { blocked_list 100000000i64 10000i64 }
+-- compiled notest script input { blocked_list 100000000i64 100000i64 }
+-- compiled notest script input { blocked_list 100000000i64 1000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 10000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 100000000i64 }
 entry wyllie_bench = wyllie.list_ranking
 entry random_mate_example_bench = random_mate_example.list_ranking
 entry random_mate_bench = random_mate.list_ranking
