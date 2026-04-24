@@ -2,6 +2,7 @@
 -- including the random mate and sequential implementations, as well as input
 -- generation and testing.
 
+import "lib/github.com/diku-dk/containers/bitset"
 import "blocked_list_ranking"
 import "common"
 
@@ -120,8 +121,8 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
            then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i])
            else (r, s, nil)
          let (rank, succ, remove) = unzip3 (map4 update (iota m) active rank succ)
-         let keep = scatter (replicate m true) remove (rep false)
-         let (active, dead) = copy (partition (\i -> keep[i]) (iota m))
+         let keep = bitset.from_array m remove
+         let (active, dead) = partition (\i -> not (bitset.member i keep)) (iota m)
          let dead_is = gather is dead
          let removed_is = map (+ removed_offsets[t - 1]) (indices dead)
          let removed = scatter removed removed_is dead_is
