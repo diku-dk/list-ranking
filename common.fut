@@ -185,6 +185,8 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   then replicate n true
   else if n == 2
   then (replicate n false) with [h] = true
+  else if n == 3
+  then ((replicate n false) with [h] = true) with [succ[succ[h]]] = true
   else let pred = predecessor succ
        let l = end succ
        let succ = copy succ with [l] = h

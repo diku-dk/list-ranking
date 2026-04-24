@@ -162,7 +162,9 @@ module list_ranking_independent_set (S: state) : list_ranking = {
                 (t: i64)
                 (removed: *[n]i64)
                 (removed_offsets: *[]i64) : ?[k].(*[k]i32, *[k]i64, *[k]i64, *[n]i32, *[n]i64, i64, i64, *[n]i64, *[]i64) =
-    if length succ == 1
+    if 10000 < t
+    then assert false (rank, succ, is, final_rank, final_succ, h, t + 1i64, removed, removed_offsets)
+    else if length succ == 1
     then let final_rank[is[0]] = rank[0]
          in ([], [], [], final_rank, final_succ, h, t, removed, removed_offsets)
     else let state = get_rulers t h succ
@@ -223,10 +225,8 @@ module random_mate_state : state = {
     let x = ((x >> 16) ^ x)
     in i32.u32 x
 
-  def get_rulers [n] (t: i64) (h: i64) (succ: [n]i64) : *[n]bool =
-    let flip i =
-      (hash (i32.i64 (i ^ t)) % 2 == 0 || i == h)
-      && succ[i] != nil
+  def get_rulers [n] (t: i64) (_: i64) (succ: [n]i64) : *[n]bool =
+    let flip i = hash (i32.i64 (i ^ t)) % 2 == 0
     in map (\i ->
               flip i && not (flip succ[i]))
            (indices succ)
@@ -299,6 +299,7 @@ entry blocked_list = blocked_list
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
+
 entry sequential_test = mk_test sequential.list_ranking
 entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_optim_test = mk_test random_mate_optim.list_ranking
