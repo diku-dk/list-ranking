@@ -146,11 +146,6 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          let removed_is = map2 (\f o -> if f then -1 else removed_offsets[t - 1] + o - 1) keep dead_offsets
          let removed = scatter removed removed_is is
          let final_succ = scatter final_succ dead_is dead_succ
-         let removed_offsets =
-           if length removed_offsets == t
-           then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
-                in removed_offsets with [t] = num_dead + removed_offsets[t - 1]
-           else removed_offsets with [t] = num_dead + removed_offsets[t - 1]
          let active_is = map2 (\f o -> if f then o - 1 else -1) keep active_offsets
          let update i a r s =
            if succ[i] == nil
@@ -179,6 +174,11 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          let succ = scatter (#[scratch] copy succ) active_is succ
          let is = scatter (#[scratch] copy is) active_is is
          let h = active_offsets[h] - 1
+         let removed_offsets =
+           if length removed_offsets == t
+           then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
+                in removed_offsets with [t] = num_dead + removed_offsets[t - 1]
+           else removed_offsets with [t] = num_dead + removed_offsets[t - 1]
          in ( rank[:num_active]
             , map (\s -> if s == nil then nil else active_offsets[s] - 1) succ[:num_active]
             , is[:num_active]
