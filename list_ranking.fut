@@ -113,14 +113,14 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          in ([], [], [], final_rank, final_succ, h, t, removed, removed_offsets)
     else let set = get_independent_set t h succ
          let is_active = tabulate m (is_member set)
-         let update i a r s =
+         let to_remove i a =
            if succ[i] == nil
-           then (r, s, nil, 0)
+           then (nil, 0)
            else if a
-           then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i], 1)
-           else (r, s, nil, 0)
-         let (rank, succ, remove, counts) =
-           unzip4 (map4 update (iota m) is_active rank succ)
+           then (succ[i], 1)
+           else (nil, 0)
+         let (remove, counts) =
+           unzip (map2 to_remove (iota m) is_active)
          let num_dead = i64.sum counts
          let num_active = m - num_dead
          let keep = scatter (replicate m true) remove (rep false)
@@ -128,7 +128,7 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
            map (\b -> (i64.bool b, i64.bool (not b))) keep
            |> scan (\(a0, b0) (a1, b1) -> (a0 + a1, b0 + b1)) (0, 0)
            |> map (\(a, b) -> (a, b))
-           |> unzip2
+           |> unzip
          let (dead_is, dead_rank, dead_succ) =
            map2 (\f i ->
                    if f
@@ -152,6 +152,14 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
                 in removed_offsets with [t] = num_dead + removed_offsets[t - 1]
            else removed_offsets with [t] = num_dead + removed_offsets[t - 1]
          let active_is = map2 (\f o -> if f then o - 1 else -1) keep active_offsets
+         let update i a r s =
+           if succ[i] == nil
+           then (r, s)
+           else if a
+           then (rank[i] + rank[succ[i]], succ[succ[i]])
+           else (r, s)
+         let (new_rank, new_succ) =
+           unzip (map4 update (iota m) is_active rank succ)
          let (rank, succ, is) =
            copy (map4 (\f r s i ->
                          if f
@@ -163,8 +171,8 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
                               )
                          else (0, nil, nil))
                       keep
-                      rank
-                      succ
+                      new_rank
+                      new_succ
                       is
                  |> unzip3)
          let rank = scatter (#[scratch] copy rank) active_is rank
