@@ -161,20 +161,20 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          let (new_rank, new_succ) =
            unzip (map4 update (iota m) is_active rank succ)
          let (rank, succ, is) =
-           copy (map4 (\f r s i ->
-                         if f
-                         then ( r
-                              , if s == nil
-                                then nil
-                                else s
-                              , i
-                              )
-                         else (0, nil, nil))
-                      keep
-                      new_rank
-                      new_succ
-                      is
-                 |> unzip3)
+           map4 (\f r s i ->
+                   if f
+                   then ( r
+                        , if s == nil
+                          then nil
+                          else s
+                        , i
+                        )
+                   else (0, nil, nil))
+                keep
+                new_rank
+                new_succ
+                is
+           |> unzip3
          let rank = scatter (#[scratch] copy rank) active_is rank
          let succ = scatter (#[scratch] copy succ) active_is succ
          let is = scatter (#[scratch] copy is) active_is is
