@@ -126,17 +126,17 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n](i8, bool) =
                   let c2ssssv = lsb_diff ssssv sssssv
                   -- c2[succ^4[v]]
                   -- is_local_min[u] = c2[pred[u]] >= c2[u] && c2[u] <= c2[succ[u]]
-                  let ilm_pppv = c2ppppv >= c2pppv && c2pppv <= c2ppv
-                  let ilm_ppv = c2pppv >= c2ppv && c2ppv <= c2pv
-                  let ilm_pv = c2ppv >= c2pv && c2pv <= c2v
-                  let ilm_v = c2pv >= c2v && c2v <= c2sv
-                  let ilm_sv = c2v >= c2sv && c2sv <= c2ssv
-                  let ilm_ssv = c2sv >= c2ssv && c2ssv <= c2sssv
-                  let ilm_sssv = c2ssv >= c2sssv && c2sssv <= c2ssssv
+                  let ilm_pppv = if c2ppppv < c2pppv then false else c2pppv <= c2ppv
+                  let ilm_ppv = if c2pppv < c2ppv then false else c2ppv <= c2pv
+                  let ilm_pv = if c2ppv < c2pv then false else c2pv <= c2v
+                  let ilm_v = if c2pv < c2v then false else c2v <= c2sv
+                  let ilm_sv = if c2v < c2sv then false else c2sv <= c2ssv
+                  let ilm_ssv = if c2sv < c2ssv then false else c2ssv <= c2sssv
+                  let ilm_sssv = if c2ssv < c2sssv then false else c2sssv <= c2ssssv
                   -- is_local_max[u] = c2[pred[u]] <= c2[u] && c2[u] >= c2[succ[u]]
-                  let ilmax_pv = c2ppv <= c2pv && c2pv >= c2v
-                  let ilmax_v = c2pv <= c2v && c2v >= c2sv
-                  let ilmax_sv = c2v <= c2sv && c2sv >= c2ssv
+                  let ilmax_pv = if c2ppv > c2pv then false else c2pv >= c2v
+                  let ilmax_v = if c2pv > c2v then false else c2v >= c2sv
+                  let ilmax_sv = if c2v > c2sv then false else c2sv >= c2ssv
                   -- coins: bit u c2[u]
                   let coin_ppv = bit ssi c2ppv
                   let coin_pv = bit sssi c2pv
@@ -144,17 +144,28 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n](i8, bool) =
                   let coin_sv = bit sv c2sv
                   let coin_ssv = bit ssv c2ssv
                   -- selected[u] = ilm[u] && (!(ilm[pred[u]] || ilm[succ[u]]) || coin[u] == 1)
-                  let sel_ppv = ilm_ppv && (!(ilm_pppv || ilm_pv) || coin_ppv == 1)
-                  let sel_pv = ilm_pv && (!(ilm_ppv || ilm_v) || coin_pv == 1)
-                  let sel_v = ilm_v && (!(ilm_pv || ilm_sv) || coin_v == 1)
-                  let sel_sv = ilm_sv && (!(ilm_v || ilm_ssv) || coin_sv == 1)
-                  let sel_ssv = ilm_ssv && (!(ilm_sv || ilm_sssv) || coin_ssv == 1)
+                  let sel_ppv = if !ilm_ppv then false else if ilm_pppv then coin_ppv == 1 else if ilm_pv then coin_ppv == 1 else true
+                  let sel_pv = if !ilm_pv then false else if ilm_ppv then coin_pv == 1 else if ilm_v then coin_pv == 1 else true
+                  let sel_v = if !ilm_v then false else if ilm_pv then coin_v == 1 else if ilm_sv then coin_v == 1 else true
+                  let sel_sv = if !ilm_sv then false else if ilm_v then coin_sv == 1 else if ilm_ssv then coin_sv == 1 else true
+                  let sel_ssv = if !ilm_ssv then false else if ilm_sv then coin_ssv == 1 else if ilm_sssv then coin_ssv == 1 else true
                   -- available[u] = !sel[u] && !sel[pred[u]] && !sel[succ[u]] && ilmax[u]
-                  let avail_pv = !sel_pv && !sel_ppv && !sel_v && ilmax_pv
-                  let avail_v = !sel_v && !sel_pv && !sel_sv && ilmax_v
-                  let avail_sv = !sel_sv && !sel_v && !sel_ssv && ilmax_sv
+                  let avail_pv = if sel_pv then false else if sel_ppv then false else if sel_v then false else ilmax_pv
+                  let avail_v = if sel_v then false else if sel_pv then false else if sel_sv then false else ilmax_v
+                  let avail_sv = if sel_sv then false else if sel_v then false else if sel_ssv then false else ilmax_sv
                   -- destination, color, selected'[v]
-                  in (v, c2v, sel_v || (avail_v && (!(avail_pv || avail_sv) || coin_v == 1))))
+                  in ( v
+                     , c2v
+                     , if sel_v
+                       then true
+                       else if !avail_v
+                       then false
+                       else if avail_pv
+                       then coin_v == 1
+                       else if avail_sv
+                       then coin_v == 1
+                       else true
+                     ))
     |> unzip3
   in scatter (replicate n (0i8, false)) destinations (zip colors bools)
 
