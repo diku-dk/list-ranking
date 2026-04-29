@@ -108,23 +108,27 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
     then let wyllie_rank = wyllie_list_ranking h rank succ
          let final_rank = scatter final_rank is wyllie_rank
          in ([], [], [], final_rank, final_succ, h, t, removed, removed_offsets)
+    else if length succ == 1
+    then let final_rank[is[0]] = rank[0]
+         in ([], [], [], final_rank, final_succ, h, t, removed, removed_offsets)
     else let set = get_independent_set t h succ
          let is_active = tabulate m (is_member set)
          let update i a r s =
            if succ[i] == nil
-           then (r, s, nil)
+           then (r, s, nil, 0)
            else if a
-           then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i])
-           else (r, s, nil)
-         let (rank, succ, remove) = unzip3 (map4 update (iota m) is_active rank succ)
-         let num_active = i64.sum (map (i64.bool <-< (!= nil)) remove)
+           then (rank[i] + rank[succ[i]], succ[succ[i]], succ[i], 1)
+           else (r, s, nil, 0)
+         let (rank, succ, remove, counts) =
+           unzip4 (map4 update (iota m) is_active rank succ)
+         let num_dead = i64.sum counts
+         let num_active = m - num_dead
          let keep = scatter (replicate m true) remove (rep false)
          let (active_offsets, dead_offsets) =
            map (\b -> (i64.bool b, i64.bool (not b))) keep
            |> scan (\(a0, b0) (a1, b1) -> (a0 + a1, b0 + b1)) (0, 0)
            |> map (\(a, b) -> (a, b))
            |> unzip2
-         let num_dead = m - num_active
          let (dead_is, dead_rank, dead_succ) =
            map2 (\f i ->
                    if f
@@ -148,14 +152,13 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
                 in removed_offsets with [t] = num_dead + removed_offsets[t - 1]
            else removed_offsets with [t] = num_dead + removed_offsets[t - 1]
          let active_is = map2 (\f o -> if f then o - 1 else -1) keep active_offsets
-         let h = active_offsets[h] - 1
          let (rank, succ, is) =
            copy (map4 (\f r s i ->
                          if f
                          then ( r
                               , if s == nil
                                 then nil
-                                else active_offsets[s] - 1
+                                else s
                               , i
                               )
                          else (0, nil, nil))
@@ -167,8 +170,9 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          let rank = scatter (#[scratch] copy rank) active_is rank
          let succ = scatter (#[scratch] copy succ) active_is succ
          let is = scatter (#[scratch] copy is) active_is is
+         let h = active_offsets[h] - 1
          in ( rank[:num_active]
-            , succ[:num_active]
+            , map (\s -> if s == nil then nil else active_offsets[s] - 1) succ[:num_active]
             , is[:num_active]
             , final_rank
             , final_succ
@@ -196,9 +200,7 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
 
 -- | A module for performing random mate.
 module random_mate_state (B: {val is_base_case : i64 -> i64 -> bool}) : independent_set = {
-  type^ s = ?[n].[n]bool
-  def is_member [n] (s: [n]bool) (i: i64) : bool = s[i]
-  def is_base_case = B.is_base_case
+  type^ s = ?[n].(i64, [n]i64)
 
   def hash (x: i32) : i32 =
     let x = u32.i32 x
@@ -207,11 +209,14 @@ module random_mate_state (B: {val is_base_case : i64 -> i64 -> bool}) : independ
     let x = ((x >> 16) ^ x)
     in i32.u32 x
 
-  def get_independent_set [n] (t: i64) (_: i64) (succ: [n]i64) : *[n]bool =
+  def is_member ((t, succ): s) (i: i64) =
     let flip i = hash (i32.i64 (i ^ t)) % 2 == 0
-    in map (\i ->
-              flip i && not (flip succ[i]))
-           (indices succ)
+    in flip i && not (flip succ[i])
+
+  def is_base_case = B.is_base_case
+
+  def get_independent_set [n] (t: i64) (_: i64) (succ: [n]i64) =
+    (t, copy succ)
 }
 
 module random_mate : list_ranking =
@@ -267,21 +272,22 @@ entry sequential_bench = sequential.list_ranking
 
 -- ==
 -- entry: wyllie_bench random_mate_bench random_mate_bounded_bench cole_vishkin_bench cole_vishkin_bounded_bench
--- compiled notest script input { blocked_list 20000000i64 1i64 }
--- compiled notest script input { blocked_list 20000000i64 10i64 }
--- compiled notest script input { blocked_list 20000000i64 100i64 }
--- compiled notest script input { blocked_list 20000000i64 1000i64 }
--- compiled notest script input { blocked_list 20000000i64 10000i64 }
--- compiled notest script input { blocked_list 20000000i64 100000i64 }
--- compiled notest script input { blocked_list 20000000i64 1000000i64 }
--- compiled notest script input { blocked_list 20000000i64 10000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 1i64 }
+-- compiled notest script input { blocked_list 100000000i64 10i64 }
+-- compiled notest script input { blocked_list 100000000i64 100i64 }
+-- compiled notest script input { blocked_list 100000000i64 1000i64 }
+-- compiled notest script input { blocked_list 100000000i64 10000i64 }
+-- compiled notest script input { blocked_list 100000000i64 100000i64 }
+-- compiled notest script input { blocked_list 100000000i64 1000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 10000000i64 }
+-- compiled notest script input { blocked_list 100000000i64 100000000i64 }
 entry wyllie_bench = wyllie.list_ranking
 entry random_mate_bench = random_mate.list_ranking
 entry random_mate_bounded_bench = random_mate_bounded.list_ranking
 entry cole_vishkin_bench = cole_vishkin.list_ranking
 entry cole_vishkin_bounded_bench = cole_vishkin_bounded.list_ranking
 
--- entry average_stride [n] (S: [n]i64) =
---   map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
---   |> f64.sum
---   |> (/ f64.i64 n)
+entry average_stride [n] (S: [n]i64) =
+  map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
+  |> f64.sum
+  |> (/ f64.i64 n)
