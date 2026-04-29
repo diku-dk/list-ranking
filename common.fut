@@ -55,7 +55,7 @@ def init_color (n: i64) : [n]i64 = iota n
 -- | A log k-coloring constructed from a list and a k-coloring and a
 -- list.
 def logk_coloring [n] (color: [n]i64) (succ: [n]i64) : [n]i8 =
-  tabulate n (\i -> lsb_diff color[i] color[succ[i]])
+  tabulate n (\i -> lsb_diff color[i] succ[i])
 
 -- | The different found in lsb_diff.
 def bit (v: i64) (b: i8) : i8 =
@@ -66,7 +66,7 @@ def bit (v: i64) (b: i8) : i8 =
 def predecessor [n] (succ: [n]i64) : [n]i64 =
   scatter (rep nil) succ (iota n)
 
-def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   let pred = predecessor succ
   let l = end succ
   let succ = copy succ with [l] = h
@@ -93,37 +93,70 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
                   in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
   in selected'
 
-def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
-  let l = end succ
-  let succ = copy succ with [l] = h
-  let color0 = init_color n
-  let color2 = logk_coloring color0 succ
-  let is_local_min =
-    tabulate n (\i -> color2[i] >= color2[succ[i]] && color2[succ[i]] <= color2[succ[succ[i]]])
-    |> scatter (replicate n false) (rotate 1 (iota n))
-  let is_local_max =
-    tabulate n (\i -> color2[i] <= color2[succ[i]] && color2[succ[i]] >= color2[succ[succ[i]]])
-    |> scatter (replicate n false) (rotate 1 (iota n))
-  let selected =
+def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n](i8, bool) =
+  let next i = if succ[i] == nil then h else succ[i]
+  let (destinations, colors, bools) =
     tabulate n (\i ->
-                  let neighbor_is_local_min = is_local_min[i] || is_local_min[succ[succ[i]]]
-                  let coin = bit color0[succ[i]] color2[succ[i]]
-                  in is_local_min[succ[i]] && ((not neighbor_is_local_min) || coin == 1))
-    |> scatter (replicate n false) (rotate 1 (iota n))
-  let available =
-    tabulate n (\i ->
-                  not selected[succ[i]]
-                  && not selected[i]
-                  && not selected[succ[succ[i]]]
-                  && is_local_max[succ[i]])
-    |> scatter (replicate n false) (rotate 1 (iota n))
-  let selected' =
-    tabulate n (\i ->
-                  let neighbor_is_available = available[i] || available[succ[succ[i]]]
-                  let coin = bit color0[succ[i]] color2[succ[i]]
-                  in selected[succ[i]] || (available[succ[i]] && ((not neighbor_is_available) || coin == 1)))
-    |> scatter (replicate n false) (rotate 1 (iota n))
-  in selected'
+                  let si = next i
+                  let ssi = next si
+                  let sssi = next ssi
+                  let v = next sssi
+                  let sv = next v
+                  let ssv = next sv
+                  let sssv = next ssv
+                  let ssssv = next sssv
+                  let sssssv = next ssssv
+                  -- c2[u] = lsb_diff u succ[u]  (since color0 = iota n)
+                  let c2ppppv = lsb_diff i si
+                  -- c2[pred^4[v]]
+                  let c2pppv = lsb_diff si ssi
+                  -- c2[pred^3[v]]
+                  let c2ppv = lsb_diff ssi sssi
+                  -- c2[pred^2[v]]
+                  let c2pv = lsb_diff sssi v
+                  -- c2[pred^1[v]]
+                  let c2v = lsb_diff v sv
+                  -- c2[v]
+                  let c2sv = lsb_diff sv ssv
+                  -- c2[succ^1[v]]
+                  let c2ssv = lsb_diff ssv sssv
+                  -- c2[succ^2[v]]
+                  let c2sssv = lsb_diff sssv ssssv
+                  -- c2[succ^3[v]]
+                  let c2ssssv = lsb_diff ssssv sssssv
+                  -- c2[succ^4[v]]
+                  -- is_local_min[u] = c2[pred[u]] >= c2[u] && c2[u] <= c2[succ[u]]
+                  let ilm_pppv = c2ppppv >= c2pppv && c2pppv <= c2ppv
+                  let ilm_ppv = c2pppv >= c2ppv && c2ppv <= c2pv
+                  let ilm_pv = c2ppv >= c2pv && c2pv <= c2v
+                  let ilm_v = c2pv >= c2v && c2v <= c2sv
+                  let ilm_sv = c2v >= c2sv && c2sv <= c2ssv
+                  let ilm_ssv = c2sv >= c2ssv && c2ssv <= c2sssv
+                  let ilm_sssv = c2ssv >= c2sssv && c2sssv <= c2ssssv
+                  -- is_local_max[u] = c2[pred[u]] <= c2[u] && c2[u] >= c2[succ[u]]
+                  let ilmax_pv = c2ppv <= c2pv && c2pv >= c2v
+                  let ilmax_v = c2pv <= c2v && c2v >= c2sv
+                  let ilmax_sv = c2v <= c2sv && c2sv >= c2ssv
+                  -- coins: bit u c2[u]
+                  let coin_ppv = bit ssi c2ppv
+                  let coin_pv = bit sssi c2pv
+                  let coin_v = bit v c2v
+                  let coin_sv = bit sv c2sv
+                  let coin_ssv = bit ssv c2ssv
+                  -- selected[u] = ilm[u] && (!(ilm[pred[u]] || ilm[succ[u]]) || coin[u] == 1)
+                  let sel_ppv = ilm_ppv && (!(ilm_pppv || ilm_pv) || coin_ppv == 1)
+                  let sel_pv = ilm_pv && (!(ilm_ppv || ilm_v) || coin_pv == 1)
+                  let sel_v = ilm_v && (!(ilm_pv || ilm_sv) || coin_v == 1)
+                  let sel_sv = ilm_sv && (!(ilm_v || ilm_ssv) || coin_sv == 1)
+                  let sel_ssv = ilm_ssv && (!(ilm_sv || ilm_sssv) || coin_ssv == 1)
+                  -- available[u] = !sel[u] && !sel[pred[u]] && !sel[succ[u]] && ilmax[u]
+                  let avail_pv = !sel_pv && !sel_ppv && !sel_v && ilmax_pv
+                  let avail_v = !sel_v && !sel_pv && !sel_sv && ilmax_v
+                  let avail_sv = !sel_sv && !sel_v && !sel_ssv && ilmax_sv
+                  -- destination, color, selected'[v]
+                  in (v, c2v, sel_v || (avail_v && (!(avail_pv || avail_sv) || coin_v == 1))))
+    |> unzip3
+  in scatter (replicate n (0i8, false)) destinations (zip colors bools)
 
 -- | Work efficient bucket sort with log n buckets, it does O(n) work
 -- and has O(log n) span.
@@ -179,31 +212,11 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   then (replicate n false) with [h] = true
   else if n == 3
   then ((replicate n false) with [h] = true) with [succ[succ[h]]] = true
-  else let pred = predecessor succ
-       let l = end succ
-       let succ = copy succ with [l] = h
-       let pred = copy pred with [h] = l
-       let color0 = init_color n
-       let color1 = logk_coloring color0 succ
-       let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
-       let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
-       let selected =
-         tabulate n (\i ->
-                       let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
-                       let coin = bit color0[i] color1[i]
-                       in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
-       let available =
-         tabulate n (\i ->
-                       not selected[i]
-                       && not selected[pred[i]]
-                       && not selected[succ[i]]
-                       && is_local_max[i])
-       let set =
-         tabulate n (\i ->
-                       let neighbor_is_available = available[pred[i]] || available[succ[i]]
-                       let coin = bit color0[i] color1[i]
-                       in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
-       let (offsets, _, is) = logn_bucket_sort color1 (iota n)
+  else let next i = if succ[i] == nil then h else succ[i]
+       -- Use logk_ruling_set for initial set, also recover color1 for bucket sort
+       let (color1, set) = copy (logk_ruling_set h succ |> unzip)
+       -- Sort by color of successor: j becomes pred[v] where v = next j
+       let (offsets, _, is) = logn_bucket_sort (map (\j -> color1[next j]) (iota n)) (iota n)
        let spans =
          indices offsets
          |> map (\i ->
@@ -214,8 +227,9 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
          loop set
          for (start, end) in spans do
            let js = is[start:end]
-           let flags = map (\j -> not set[succ[j]] && not set[pred[j]]) js
-           let set = scatter set (map2 (\f j -> if f then j else nil) flags js) (rep true)
+           -- v = next j, so pred[v]=j and succ[v]=next(next j) are free — no pred array needed
+           let flags = map (\j -> not set[j] && not set[next j] && not set[next (next j)]) js
+           let set = scatter set (map2 (\f j -> if f then next j else nil) flags js) (rep true)
            in set
        in set
 
@@ -274,7 +288,7 @@ entry test_two_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
 
 entry test_logn_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
   let k = ceil_log2 n
-  let ruling_set = logk_ruling_set h succ
+  let ruling_set = logk_ruling_set h succ |> map (.1)
   in is_k_ruling_set k succ ruling_set
 
 -- ==

@@ -121,9 +121,9 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
            else (nil, 0)
          let (remove, counts) =
            unzip (map2 to_remove (iota m) is_active)
+         let keep = scatter (replicate m true) remove (rep false)
          let num_dead = i64.sum counts
          let num_active = m - num_dead
-         let keep = scatter (replicate m true) remove (rep false)
          let (active_offsets, dead_offsets) =
            map (\b -> (i64.bool b, i64.bool (not b))) keep
            |> scan (\(a0, b0) (a1, b1) -> (a0 + a1, b0 + b1)) (0, 0)
