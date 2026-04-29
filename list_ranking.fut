@@ -127,7 +127,6 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          let (active_offsets, dead_offsets) =
            map (\b -> (i64.bool b, i64.bool (not b))) keep
            |> scan (\(a0, b0) (a1, b1) -> (a0 + a1, b0 + b1)) (0, 0)
-           |> map (\(a, b) -> (a, b))
            |> unzip
          let (dead_is, dead_rank, dead_succ) =
            map2 (\f i ->
