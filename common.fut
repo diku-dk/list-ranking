@@ -66,36 +66,74 @@ def bit (v: i64) (b: i8) : i8 =
 def predecessor [n] (succ: [n]i64) : [n]i64 =
   scatter (rep nil) succ (iota n)
 
-def logx_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def logk_ruling_set_old [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
   let pred = predecessor succ
   let l = end succ
-  let succ = copy succ with [l] = h
-  let pred = copy pred with [h] = l
-  let color0 = init_color n
-  let color1 = logk_coloring color0 succ
-  let is_local_min = tabulate n (\i -> color1[pred[i]] >= color1[i] && color1[i] <= color1[succ[i]])
-  let is_local_max = tabulate n (\i -> color1[pred[i]] <= color1[i] && color1[i] >= color1[succ[i]])
+  let next i = if succ[i] == nil then h else succ[i]
+  let prev i = if pred[i] == nil then l else pred[i]
+  let color1 = tabulate n (\i -> lsb_diff i (next i))
+  let is_local_min = tabulate n (\i -> color1[prev i] >= color1[i] && color1[i] <= color1[next i])
+  let is_local_max = tabulate n (\i -> color1[prev i] <= color1[i] && color1[i] >= color1[next i])
   let selected =
     tabulate n (\i ->
-                  let neighbor_is_local_min = is_local_min[pred[i]] || is_local_min[succ[i]]
-                  let coin = bit color0[i] color1[i]
+                  let neighbor_is_local_min = is_local_min[prev i] || is_local_min[next i]
+                  let coin = bit i color1[i]
                   in is_local_min[i] && ((not neighbor_is_local_min) || coin == 1))
   let available =
     tabulate n (\i ->
                   not selected[i]
-                  && not selected[pred[i]]
-                  && not selected[succ[i]]
+                  && not selected[prev i]
+                  && not selected[next i]
                   && is_local_max[i])
-  let selected' =
+  let set =
     tabulate n (\i ->
-                  let neighbor_is_available = available[pred[i]] || available[succ[i]]
-                  let coin = bit color0[i] color1[i]
+                  let neighbor_is_available = available[prev i] || available[next i]
+                  let coin = bit i color1[i]
                   in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
-  in selected'
+  in (color1, set)
 
-def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n](i8, bool) =
+def logk_ruling_set_filter [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
+  let pred = predecessor succ
+  let l = end succ
   let next i = if succ[i] == nil then h else succ[i]
-  let (destinations, colors, bools) =
+  let prev i = if pred[i] == nil then l else pred[i]
+  let color1 = tabulate n (\i -> lsb_diff i (next i))
+  let is_local_min = tabulate n (\i -> color1[prev i] >= color1[i] && color1[i] <= color1[next i])
+  let is_local_max = tabulate n (\i -> color1[prev i] <= color1[i] && color1[i] >= color1[next i])
+  let is_min_candidates =
+    filter (.0) (zip is_local_min (iota n))
+    |> map (.1)
+  let is_max_candidates =
+    filter (.0) (zip is_local_max (iota n))
+    |> map (.1)
+  let selected =
+    map (\i ->
+           let neighbor_is_local_min = is_local_min[prev i] || is_local_min[next i]
+           let coin = bit i color1[i]
+           in if (not neighbor_is_local_min) || coin == 1 then (i, true) else (-1, false))
+        is_min_candidates
+    |> unzip
+    |> \(is, vs) -> scatter (replicate n false) is vs
+  let available =
+    map (\i ->
+           if not selected[i]
+              && not selected[prev i]
+           && not selected[next i]
+           then (i, true)
+           else (-1, false))
+        is_max_candidates
+    |> unzip
+    |> \(is, vs) -> scatter (replicate n false) is vs
+  let set =
+    tabulate n (\i ->
+                  let neighbor_is_available = available[prev i] || available[next i]
+                  let coin = bit i color1[i]
+                  in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
+  in (color1, set)
+
+def logk_ruling_set [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
+  let next i = if succ[i] == nil then h else succ[i]
+  let (is_colors, js_bools) =
     tabulate n (\i ->
                   let si = next i
                   let ssi = next si
@@ -103,71 +141,64 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : [n](i8, bool) =
                   let v = next sssi
                   let sv = next v
                   let ssv = next sv
-                  let sssv = next ssv
-                  let ssssv = next sssv
-                  let sssssv = next ssssv
-                  -- c2[u] = lsb_diff u succ[u]  (since color0 = iota n)
+                  -- colors computable from i..ssv
                   let c2ppppv = lsb_diff i si
-                  -- c2[pred^4[v]]
                   let c2pppv = lsb_diff si ssi
-                  -- c2[pred^3[v]]
                   let c2ppv = lsb_diff ssi sssi
-                  -- c2[pred^2[v]]
                   let c2pv = lsb_diff sssi v
-                  -- c2[pred^1[v]]
                   let c2v = lsb_diff v sv
-                  -- c2[v]
                   let c2sv = lsb_diff sv ssv
-                  -- c2[succ^1[v]]
-                  let c2ssv = lsb_diff ssv sssv
-                  -- c2[succ^2[v]]
-                  let c2sssv = lsb_diff sssv ssssv
-                  -- c2[succ^3[v]]
-                  let c2ssssv = lsb_diff ssssv sssssv
-                  -- c2[succ^4[v]]
-                  -- is_local_min[u] = c2[pred[u]] >= c2[u] && c2[u] <= c2[succ[u]]
-                  let ilm_pppv = if c2ppppv < c2pppv then false else c2pppv <= c2ppv
-                  let ilm_ppv = if c2pppv < c2ppv then false else c2ppv <= c2pv
-                  let ilm_pv = if c2ppv < c2pv then false else c2pv <= c2v
-                  let ilm_v = if c2pv < c2v then false else c2v <= c2sv
-                  let ilm_sv = if c2v < c2sv then false else c2sv <= c2ssv
-                  let ilm_ssv = if c2sv < c2ssv then false else c2ssv <= c2sssv
-                  let ilm_sssv = if c2ssv < c2sssv then false else c2sssv <= c2ssssv
-                  -- is_local_max[u] = c2[pred[u]] <= c2[u] && c2[u] >= c2[succ[u]]
-                  let ilmax_pv = if c2ppv > c2pv then false else c2pv >= c2v
-                  let ilmax_v = if c2pv > c2v then false else c2v >= c2sv
-                  let ilmax_sv = if c2v > c2sv then false else c2sv >= c2ssv
-                  -- coins: bit u c2[u]
-                  let coin_ppv = bit ssi c2ppv
-                  let coin_pv = bit sssi c2pv
-                  let coin_v = bit v c2v
-                  let coin_sv = bit sv c2sv
-                  let coin_ssv = bit ssv c2ssv
-                  -- selected[u] = ilm[u] && (!(ilm[pred[u]] || ilm[succ[u]]) || coin[u] == 1)
-                  let sel_ppv = if !ilm_ppv then false else if ilm_pppv then coin_ppv == 1 else if ilm_pv then coin_ppv == 1 else true
-                  let sel_pv = if !ilm_pv then false else if ilm_ppv then coin_pv == 1 else if ilm_v then coin_pv == 1 else true
-                  let sel_v = if !ilm_v then false else if ilm_pv then coin_v == 1 else if ilm_sv then coin_v == 1 else true
-                  let sel_sv = if !ilm_sv then false else if ilm_v then coin_sv == 1 else if ilm_ssv then coin_sv == 1 else true
-                  let sel_ssv = if !ilm_ssv then false else if ilm_sv then coin_ssv == 1 else if ilm_sssv then coin_ssv == 1 else true
-                  -- available[u] = !sel[u] && !sel[pred[u]] && !sel[succ[u]] && ilmax[u]
-                  let avail_pv = if sel_pv then false else if sel_ppv then false else if sel_v then false else ilmax_pv
-                  let avail_v = if sel_v then false else if sel_pv then false else if sel_sv then false else ilmax_v
-                  let avail_sv = if sel_sv then false else if sel_v then false else if sel_ssv then false else ilmax_sv
-                  -- destination, color, selected'[v]
-                  in ( v
-                     , c2v
-                     , if sel_v
-                       then true
-                       else if !avail_v
-                       then false
-                       else if avail_pv
-                       then coin_v == 1
-                       else if avail_sv
-                       then coin_v == 1
-                       else true
-                     ))
-    |> unzip3
-  in scatter (replicate n (0i8, false)) destinations (zip colors bools)
+                  -- ilm_v and ilmax_v are now fully determined
+                  let ilm_v = c2pv >= c2v && c2v <= c2sv
+                  let ilmax_v = c2pv <= c2v && c2v >= c2sv
+                  in if !ilm_v && !ilmax_v
+                     then -- sel_v=false, avail_v=false: no need to compute sssv..sssssv
+                          ((i, c2ppppv), (-1, false))
+                     else let sssv = next ssv
+                          let ssssv = next sssv
+                          let sssssv = next ssssv
+                          let c2ssv = lsb_diff ssv sssv
+                          let c2sssv = lsb_diff sssv ssssv
+                          let c2ssssv = lsb_diff ssssv sssssv
+                          -- is_local_min
+                          let ilm_pppv = c2ppppv >= c2pppv && c2pppv <= c2ppv
+                          let ilm_ppv = c2pppv >= c2ppv && c2ppv <= c2pv
+                          let ilm_pv = c2ppv >= c2pv && c2pv <= c2v
+                          let ilm_sv = c2v >= c2sv && c2sv <= c2ssv
+                          let ilm_ssv = c2sv >= c2ssv && c2ssv <= c2sssv
+                          let ilm_sssv = c2ssv >= c2sssv && c2sssv <= c2ssssv
+                          -- is_local_max
+                          let ilmax_pv = c2ppv <= c2pv && c2pv >= c2v
+                          let ilmax_sv = c2v <= c2sv && c2sv >= c2ssv
+                          -- coins
+                          let coin_ppv = bit ssi c2ppv
+                          let coin_pv = bit sssi c2pv
+                          let coin_v = bit v c2v
+                          let coin_sv = bit sv c2sv
+                          let coin_ssv = bit ssv c2ssv
+                          -- selected for pred^2[v], pred[v], v
+                          let sel_ppv = ilm_ppv && (!(ilm_pppv || ilm_pv) || coin_ppv == 1)
+                          let sel_pv = ilm_pv && (!(ilm_ppv || ilm_v) || coin_pv == 1)
+                          let sel_v = ilm_v && (!(ilm_pv || ilm_sv) || coin_v == 1)
+                          in if sel_v
+                             then -- no need to compute avail at all
+                                  ((i, c2ppppv), (v, true))
+                             else let sel_sv = ilm_sv && (!(ilm_v || ilm_ssv) || coin_sv == 1)
+                                  let sel_ssv = ilm_ssv && (!(ilm_sv || ilm_sssv) || coin_ssv == 1)
+                                  let avail_pv = !sel_pv && !sel_ppv && !sel_v && ilmax_pv
+                                  let avail_v = !sel_v && !sel_pv && !sel_sv && ilmax_v
+                                  let avail_sv = !sel_sv && !sel_v && !sel_ssv && ilmax_sv
+                                  in ( (i, c2ppppv)
+                                     , if avail_v && (!(avail_pv || avail_sv) || coin_v == 1)
+                                       then (v, true)
+                                       else (-1, false)
+                                     ))
+    |> unzip
+  let (is, colors) = unzip is_colors
+  let (js, bools) = unzip js_bools
+  let colors = scatter (replicate n 0i8) is colors
+  let bools = scatter (replicate n false) js bools
+  in (colors, bools)
 
 -- | Work efficient bucket sort with log n buckets, it does O(n) work
 -- and has O(log n) span.
@@ -225,7 +256,7 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   then ((replicate n false) with [h] = true) with [succ[succ[h]]] = true
   else let next i = if succ[i] == nil then h else succ[i]
        -- Use logk_ruling_set for initial set, also recover color1 for bucket sort
-       let (color1, set) = copy (logk_ruling_set h succ |> unzip)
+       let (color1, set) = copy (logk_ruling_set h succ)
        -- Sort by color of successor: j becomes pred[v] where v = next j
        let (offsets, _, is) = logn_bucket_sort (map (\j -> color1[next j]) (iota n)) (iota n)
        let spans =
@@ -299,7 +330,7 @@ entry test_two_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
 
 entry test_logn_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
   let k = ceil_log2 n
-  let ruling_set = logk_ruling_set h succ |> map (.1)
+  let (_, ruling_set) = logk_ruling_set h succ
   in is_k_ruling_set k succ ruling_set
 
 -- ==
