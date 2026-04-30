@@ -133,7 +133,7 @@ def logk_ruling_set_filter [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
 
 def logk_ruling_set [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
   let next i = if succ[i] == nil then h else succ[i]
-  let (is_colors, js_bools) =
+  let (colors, js_bools) =
     tabulate n (\i ->
                   let si = next i
                   let ssi = next si
@@ -153,7 +153,7 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
                   let ilmax_v = c2pv <= c2v && c2v >= c2sv
                   in if !ilm_v && !ilmax_v
                      then -- sel_v=false, avail_v=false: no need to compute sssv..sssssv
-                          ((i, c2ppppv), (-1, false))
+                          (c2ppppv, (-1, false))
                      else let sssv = next ssv
                           let ssssv = next sssv
                           let sssssv = next ssssv
@@ -182,21 +182,19 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
                           let sel_v = ilm_v && (!(ilm_pv || ilm_sv) || coin_v == 1)
                           in if sel_v
                              then -- no need to compute avail at all
-                                  ((i, c2ppppv), (v, true))
+                                  (c2ppppv, (v, true))
                              else let sel_sv = ilm_sv && (!(ilm_v || ilm_ssv) || coin_sv == 1)
                                   let sel_ssv = ilm_ssv && (!(ilm_sv || ilm_sssv) || coin_ssv == 1)
                                   let avail_pv = !sel_pv && !sel_ppv && !sel_v && ilmax_pv
                                   let avail_v = !sel_v && !sel_pv && !sel_sv && ilmax_v
                                   let avail_sv = !sel_sv && !sel_v && !sel_ssv && ilmax_sv
-                                  in ( (i, c2ppppv)
+                                  in ( c2ppppv
                                      , if avail_v && (!(avail_pv || avail_sv) || coin_v == 1)
                                        then (v, true)
                                        else (-1, false)
                                      ))
     |> unzip
-  let (is, colors) = unzip is_colors
   let (js, bools) = unzip js_bools
-  let colors = scatter (replicate n 0i8) is colors
   let bools = scatter (replicate n false) js bools
   in (colors, bools)
 
