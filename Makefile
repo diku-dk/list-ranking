@@ -7,7 +7,7 @@ run: benchmark lib
 
 # A version of the run target with much fewer workloads, for testing the tooling.
 run-fast: benchmark lib
-	./benchmark --backend=$(FUTHARK_BACKEND) -k 3 --min-n 100000 --max-n 1000000
+	./benchmark --backend=$(FUTHARK_BACKEND) -k 5 --min-n 100000 --max-n 10000000
 
 benchmark: tooling/benchmark.mlb tooling/benchmark.sml tooling/lib
 	mlkit -o $@ $<
