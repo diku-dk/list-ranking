@@ -162,7 +162,11 @@ fun main () =
       let
         val k = !k_opt
         val ns = generateNs (!min_n_opt) (!max_n_opt) k
-        val entry_points = ["wyllie_bench", "random_mate_bench"]
+        val entry_points =
+          [ "wyllie_bench"
+          , "random_mate_bounded_bench"
+          , "cole_vishkin_bounded_bench"
+          ]
         val baseline_entry_point = hd entry_points
         val () = writeSpecFile entry_points ns k
         val status = OS.Process.system
@@ -179,6 +183,9 @@ fun main () =
         val () =
           writeFile "random_mate.speedups" (generateTable baseline_results
             (List.nth (entry_point_results, 1)))
+        val () =
+          writeFile "cole_vishkin.speedups" (generateTable baseline_results
+            (List.nth (entry_point_results, 2)))
       in
         ()
       end
