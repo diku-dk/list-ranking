@@ -13,4 +13,5 @@ MLB
 list_ranking.spec
 list_ranking.json
 *.speedups
+*.scaling
 *.png

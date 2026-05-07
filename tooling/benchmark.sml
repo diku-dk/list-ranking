@@ -146,7 +146,7 @@ and usage () =
 
 fun err s = TextIO.output (TextIO.stdErr, s)
 
-fun generateTable baseline competitor =
+fun genSpeedupTable baseline competitor =
   let
     fun cell (x, y) =
       Real.toString (x / y)
@@ -154,6 +154,16 @@ fun generateTable baseline competitor =
       unwords (ListPair.map cell (n_baseline, n_competitor))
   in
     unlines (ListPair.map row (baseline, competitor))
+  end
+
+val genScalingTable =
+  let
+    fun row l =
+      let val max = foldl Real.max 0.0 l
+      in unwords (map (fn x => Real.toString (max / x)) l)
+      end
+  in
+    unlines o map row
   end
 
 fun main () =
@@ -180,14 +190,17 @@ fun main () =
         val entry_point_results =
           map (resultsForAlgorithm benchmark_results ns k) entry_points
         val baseline_results = hd entry_point_results
-        val () =
-          writeFile "random_mate.speedups" (generateTable baseline_results
-            (List.nth (entry_point_results, 1)))
-        val () =
-          writeFile "cole_vishkin.speedups" (generateTable baseline_results
-            (List.nth (entry_point_results, 2)))
       in
-        ()
+        writeFile "random_mate.speedups" (genSpeedupTable baseline_results
+          (List.nth (entry_point_results, 1)));
+        writeFile "cole_vishkin.speedups" (genSpeedupTable baseline_results
+          (List.nth (entry_point_results, 2)));
+        writeFile "wyllie.scaling" (genScalingTable
+          (List.nth (entry_point_results, 0)));
+        writeFile "random_mate.scaling" (genScalingTable
+          (List.nth (entry_point_results, 1)));
+        writeFile "cole_vishkin.scaling" (genScalingTable
+          (List.nth (entry_point_results, 2)))
       end
   | (_, _, errors) =>
       (List.app err errors; err (usage ()); OS.Process.exit OS.Process.failure)
