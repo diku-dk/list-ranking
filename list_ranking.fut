@@ -102,8 +102,8 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
                 (final_succ: *[n]i64)
                 (h: i64)
                 (t: i64)
-                (removed: *[n]i64)
-                (removed_offsets: *[]i64) : ?[k].(*[k]i32, *[k]i64, *[k]i64, *[n]i32, *[n]i64, i64, i64, *[n]i64, *[]i64) =
+                (removed: *[n](i32, i64))
+                (removed_offsets: *[]i64) : ?[k].(*[k]i32, *[k]i64, *[k]i64, *[n]i32, *[n]i64, i64, i64, *[n](i32, i64), *[]i64) =
     if is_base_case m n
     then let wyllie_rank = wyllie_list_ranking h rank succ
          let final_rank = scatter final_rank is wyllie_rank
@@ -128,22 +128,20 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
            map (\b -> (i64.bool b, i64.bool (not b))) keep
            |> scan (\(a0, b0) (a1, b1) -> (a0 + a1, b0 + b1)) (0, 0)
            |> unzip
-         let (dead_is, dead_rank, dead_succ) =
+         let (dead_is, dead_succ) =
            map2 (\f i ->
                    if f
-                   then (nil, 0, nil)
+                   then (nil, nil)
                    else ( is[i]
-                        , rank[i]
                         , if succ[i] == nil
                           then nil
                           else is[succ[i]]
                         ))
                 keep
                 (iota m)
-           |> unzip3
-         let final_rank = scatter final_rank dead_is dead_rank
+           |> unzip2
          let removed_is = map2 (\f o -> if f then -1 else removed_offsets[t - 1] + o - 1) keep dead_offsets
-         let removed = scatter removed removed_is is
+         let removed = scatter removed removed_is (zip rank is)
          let final_succ = scatter final_succ dead_is dead_succ
          let active_is = map2 (\f o -> if f then o - 1 else -1) keep active_offsets
          let update i a r s =
@@ -191,7 +189,7 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
 
   def list_ranking [n] (h: i64) (succ: [n]i64) : [n]i32 =
     let rank = replicate n 1i32
-    let removed = replicate n (-1i64)
+    let removed = replicate n (0, -1i64)
     let removed_offsets = replicate 128 0
     let (_, _, _, rank, succ, _, t_rounds, removed, removed_offsets) =
       loop (rank, succ, is, final_rank, final_succ, h, t, removed, removed_offsets) =
@@ -200,8 +198,8 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
         loop_body rank succ is final_rank final_succ h t removed removed_offsets
     in loop rank
        for t in t_rounds - 1..t_rounds - 2...1 do
-         let is = removed[removed_offsets[t - 1]:removed_offsets[t]]
-         let rs = map (\i -> if succ[i] == nil then rank[i] else rank[i] + rank[succ[i]]) is
+         let (rs, is) = unzip removed[removed_offsets[t - 1]:removed_offsets[t]]
+         let rs = map2 (\r i -> if succ[i] == nil then r else r + rank[succ[i]]) rs is
          in scatter rank is rs
 }
 
