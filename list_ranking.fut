@@ -74,7 +74,7 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
   #[inline]
   def is_base_case = S.is_base_case
 
-  #[gather]
+  #[inline]
   def gather [n] [m] 'a (as: [n]a) (is: [m]i64) =
     map (\i -> as[i]) is
 
