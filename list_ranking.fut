@@ -115,19 +115,19 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          let is_active = tabulate m (is_member set)
          let to_remove i a =
            if succ[i] == nil
-           then (nil, 0)
+           then nil
            else if a
-           then (succ[i], 1)
-           else (nil, 0)
-         let (remove, counts) =
-           unzip (map2 to_remove (iota m) is_active)
+           then succ[i]
+           else nil
+         let remove =
+           map2 to_remove (iota m) is_active
          let keep = scatter (replicate m true) remove (rep false)
-         let num_dead = i64.sum counts
-         let num_active = m - num_dead
-         let (active_offsets, dead_offsets) =
+         let offsets =
            map (\b -> (i64.bool b, i64.bool (not b))) keep
            |> scan (\(a0, b0) (a1, b1) -> (a0 + a1, b0 + b1)) (0, 0)
-           |> unzip
+         let counts = scatter [(0, 0)] (map (\i -> if i == m - 1 then 0 else -1) (iota m)) offsets
+         let (num_active, num_dead) = counts[0]
+         let (active_offsets, dead_offsets) = unzip offsets
          let (dead_is, dead_succ) =
            map2 (\f i ->
                    if f
