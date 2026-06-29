@@ -253,7 +253,7 @@ module cole_vishkin_bounded : list_ranking =
 module blelloch_reid_miller = {
   -- Split list into 'm' sublists.
   def sublists [n] (m: i64) (h: i64) (succ: *[n]i64) =
-    let stride = (n + m - 1) / m
+    let stride = (n - 1) / (m - 1)
     let (sublist_heads, tails, tail_ids) =
       unzip3
       <| tabulate m \i ->
@@ -271,15 +271,18 @@ module blelloch_reid_miller = {
     in unzip (tabulate n f)
 
   def sublist_ranking [n] (_: i64) (S: [n]i64) : ([n]i32, [n]i64) =
-    let (R, S) =
-      loop (R, S) = (replicate n 1, copy S)
-      for _i < ceil_log2 n do
-        step R S
+    let (_, R, S) =
+      loop (go, R, S) = (true, replicate n 1, copy S)
+      while go do
+        let unroll_factor = #[param(blelloch_reid_miller_unroll)] 2
+        let R_old = R
+        let (R, S) = loop (R, S) for _i < unroll_factor do step R S
+        in (or (map2 (!=) R_old R), R, S)
     in (map2 (\r s -> if s < 0 then r else r + R[s]) R S, S)
 
   def list_ranking [n] (h: i64) (S: [n]i64) : [n]i32 =
     -- 'm' sublists - this is a parameter we can adjust.
-    let m = i64.min n (#[param(blelloch_reid_miller_num_sublists)] 100000)
+    let m = i64.min n (#[param(blelloch_reid_miller_num_sublists)] 200000)
     let (sublist_heads, S') = sublists m h (copy S)
     -- TODO: figure out the maximum length of the sublists, and do a Wyllie that
     -- only needs that many iterations.
@@ -310,7 +313,8 @@ module blelloch_reid_miller = {
            T
            (indices T)
     let carry_ins =
-      map (\i -> if i < m - 1 then carry_out[i + 1] else 0) elem_to_sublist
+      map (\i -> if i < m - 1 then carry_out[i + 1] else 0)
+          elem_to_sublist
     in map2 (+) carry_ins R
 }
 
