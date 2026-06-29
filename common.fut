@@ -39,6 +39,20 @@ def find_index 'a [n] (p: a -> bool) (as: [n]a) : i64 =
     else (x, i)
   in (reduce_comm op (false, nil) (zip (map p as) (iota n))).1
 
+-- | Inclusive scan of list.
+def wyllie_scan [n] 'a
+                (op: a -> a -> a)
+                (V: [n]a)
+                (S: [n]i64) =
+  let f V S i =
+    if S[i] == nil
+    then (V[i], S[i])
+    else (V[i] `op` V[S[i]], S[S[i]])
+  let (V, _) =
+    loop (V, S) for _i < 64 - i64.clz n do
+      unzip (tabulate n (f V S))
+  in V
+
 -- | Find the end of list.
 def end [n] (succ: [n]i64) : i64 =
   find_index (== nil) succ
