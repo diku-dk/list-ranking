@@ -246,6 +246,74 @@ module cole_vishkin : list_ranking =
 module cole_vishkin_bounded : list_ranking =
   list_ranking_independent_set (cole_vishkin_state {def is_base_case m n = m < n / floor_log2 n})
 
+-- The Blelloch/Reid-Miller algorithm from "List Ranking and List Scan on the
+-- Cray C90", further described in Margaret Reid-Miller's PhD thesis
+-- "Experiments with Parallel Pointer-Based Algorithms" which is also where the
+-- name comes from.
+module blelloch_reid_miller = {
+  -- Split list into 'm' sublists.
+  def sublists [n] (m: i64) (h: i64) (succ: *[n]i64) =
+    let stride = (n + m - 1) / m
+    let (sublist_heads, tails, tail_ids) =
+      unzip3
+      <| tabulate m \i ->
+           if i == 0
+           then (h, -1, -1)
+           else let R = i * stride
+                in (succ[R], R, -i)
+    in (sublist_heads, scatter succ tails tail_ids)
+
+  def step [n] (R: [n]i32) (S: [n]i64) =
+    let f i =
+      if S[i] < 0 || S[S[i]] < 0
+      then (R[i], S[i])
+      else (R[i] + R[S[i]], S[S[i]])
+    in unzip (tabulate n f)
+
+  def sublist_ranking [n] (_: i64) (S: [n]i64) : ([n]i32, [n]i64) =
+    let (R, S) =
+      loop (R, S) = (replicate n 1, copy S)
+      for _i < ceil_log2 n do
+        step R S
+    in (map2 (\r s -> if s < 0 then r else r + R[s]) R S, S)
+
+  def list_ranking [n] (h: i64) (S: [n]i64) : [n]i32 =
+    -- 'm' sublists - this is a parameter we can adjust.
+    let m = i64.min n (#[param(blelloch_reid_miller_num_sublists)] 100000)
+    let (sublist_heads, S') = sublists m h (copy S)
+    -- TODO: figure out the maximum length of the sublists, and do a Wyllie that
+    -- only needs that many iterations.
+    let (R, T) = sublist_ranking h S'
+    -- A lot of the conditionals are to account for the case of an empty
+    -- sublist, which can be the case for the last one (but we don't know which
+    -- one that is).
+    let sublist_tails =
+      map (\i -> if i < 0 || T[i] < 0 then i else T[i]) sublist_heads
+    let sublist_V =
+      map (\h -> if h < 0 then 0 else R[h]) sublist_heads
+    let sublist_S =
+      map (\t ->
+             if t < 0 || S[t] < 0
+             then nil
+             else -S'[t])
+          sublist_tails
+    let carry_out = wyllie_scan (+) sublist_V sublist_S
+    let elem_to_sublist =
+      map2 (\t i ->
+              let t' =
+                if t < 0
+                then if S[i] < 0 then m else -t
+                else if T[t] < 0 && S[t] < 0
+                then m
+                else -T[t]
+              in t' - 1)
+           T
+           (indices T)
+    let carry_ins =
+      map (\i -> if i < m - 1 then carry_out[i + 1] else 0) elem_to_sublist
+    in map2 (+) carry_ins R
+}
+
 def mk_test list_ranking h S =
   let expected = wyllie.list_ranking h S
   let res = list_ranking h S
@@ -254,7 +322,7 @@ def mk_test list_ranking h S =
 entry blocked_list = blocked_list
 
 -- ==
--- entry: sequential_test random_mate_test random_mate_bounded_test cole_vishkin_test cole_vishkin_bounded_test
+-- entry: sequential_test random_mate_test random_mate_bounded_test cole_vishkin_test cole_vishkin_bounded_test blelloch_reid_miller_test
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
@@ -264,6 +332,7 @@ entry random_mate_test = mk_test random_mate.list_ranking
 entry random_mate_bounded_test = mk_test random_mate_bounded.list_ranking
 entry cole_vishkin_test = mk_test cole_vishkin.list_ranking
 entry cole_vishkin_bounded_test = mk_test cole_vishkin_bounded.list_ranking
+entry blelloch_reid_miller_test = mk_test blelloch_reid_miller.list_ranking
 
 -- entry: sequential_bench
 -- compiled notest script input { blocked_list 1000000i64 1i64 }
@@ -276,7 +345,7 @@ entry cole_vishkin_bounded_test = mk_test cole_vishkin_bounded.list_ranking
 entry sequential_bench = sequential.list_ranking
 
 -- ==
--- entry: wyllie_bench random_mate_bench random_mate_bounded_bench cole_vishkin_bench cole_vishkin_bounded_bench
+-- entry: wyllie_bench random_mate_bench random_mate_bounded_bench cole_vishkin_bench cole_vishkin_bounded_bench blelloch_reid_miller_bench
 -- compiled notest script input { blocked_list 100000000i64 1i64 }
 -- compiled notest script input { blocked_list 100000000i64 10i64 }
 -- compiled notest script input { blocked_list 100000000i64 100i64 }
@@ -291,6 +360,7 @@ entry random_mate_bench = random_mate.list_ranking
 entry random_mate_bounded_bench = random_mate_bounded.list_ranking
 entry cole_vishkin_bench = cole_vishkin.list_ranking
 entry cole_vishkin_bounded_bench = cole_vishkin_bounded.list_ranking
+entry blelloch_reid_miller_bench = blelloch_reid_miller.list_ranking
 
 entry average_stride [n] (S: [n]i64) =
   map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
