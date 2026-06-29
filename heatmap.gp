@@ -16,33 +16,39 @@ unset xtics
 unset ytics
 
 set view map
+set size ratio -1
+
+set autoscale noextend
+
+set xrange [-0.5:14.5]
+set yrange [0.5:14.5]
 
 set title "Speedup of Random Mate over Wyllie"
 set output "heatmap_random_mate.png"
-splot 'random_mate.speedups' matrix with image
+splot 'random_mate.speedups' matrix with image pixels
 
 set title "Speedup of Cole-Vishkin over Wyllie"
 set output "heatmap_cole_vishkin.png"
-splot 'cole_vishkin.speedups' matrix with image
+splot 'cole_vishkin.speedups' matrix with image pixels
 
 set title "Speedup of Blelloch/Reid-Miller over Wyllie"
 set output "heatmap_blelloch_reid_miller.png"
-splot 'blelloch_reid_miller.speedups' matrix with image
+splot 'blelloch_reid_miller.speedups' matrix with image pixels
 
 set cbrange [0:10]
 
 set title "Scalability of Wyllie"
 set output "scalability_wyllie.png"
-splot 'wyllie.scaling' matrix with image
+splot 'wyllie.scaling' matrix with image pixels
 
 set title "Scalability of Random Mate"
 set output "scalability_random_mate.png"
-splot 'random_mate.scaling' matrix with image
+splot 'random_mate.scaling' matrix with image pixels
 
 set title "Scalability of Cole-Vishkin"
 set output "scalability_cole_vishkin.png"
-splot 'cole_vishkin.scaling' matrix with image
+splot 'cole_vishkin.scaling' matrix with image pixels
 
 set title "Scalability of Blelloch/Reid-Miller"
 set output "scalability_blelloch_reid_miller.png"
-splot 'blelloch_reid_miller.scaling' matrix with image
+splot 'blelloch_reid_miller.scaling' matrix with image pixels
