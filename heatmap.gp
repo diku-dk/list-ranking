@@ -25,6 +25,10 @@ set title "Speedup of Cole-Vishkin over Wyllie"
 set output "heatmap_cole_vishkin.png"
 splot 'cole_vishkin.speedups' matrix with image
 
+set title "Speedup of Blelloch/Reid-Miller over Wyllie"
+set output "heatmap_blelloch_reid_miller.png"
+splot 'blelloch_reid_miller.speedups' matrix with image
+
 set cbrange [0:10]
 
 set title "Scalability of Wyllie"
@@ -38,3 +42,7 @@ splot 'random_mate.scaling' matrix with image
 set title "Scalability of Cole-Vishkin"
 set output "scalability_cole_vishkin.png"
 splot 'cole_vishkin.scaling' matrix with image
+
+set title "Scalability of Blelloch/Reid-Miller"
+set output "scalability_blelloch_reid_miller.png"
+splot 'blelloch_reid_miller.scaling' matrix with image

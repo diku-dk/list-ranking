@@ -176,6 +176,7 @@ fun main () =
           [ "wyllie_bench"
           , "random_mate_bounded_bench"
           , "cole_vishkin_bounded_bench"
+          , "blelloch_reid_miller_bench"
           ]
         val baseline_entry_point = hd entry_points
         val () = writeSpecFile entry_points ns k
@@ -195,12 +196,16 @@ fun main () =
           (List.nth (entry_point_results, 1)));
         writeFile "cole_vishkin.speedups" (genSpeedupTable baseline_results
           (List.nth (entry_point_results, 2)));
+        writeFile "blelloch_reid_miller.speedups"
+          (genSpeedupTable baseline_results (List.nth (entry_point_results, 3)));
         writeFile "wyllie.scaling" (genScalingTable
           (List.nth (entry_point_results, 0)));
         writeFile "random_mate.scaling" (genScalingTable
           (List.nth (entry_point_results, 1)));
         writeFile "cole_vishkin.scaling" (genScalingTable
-          (List.nth (entry_point_results, 2)))
+          (List.nth (entry_point_results, 2)));
+        writeFile "blelloch_reid_miller.scaling" (genScalingTable
+          (List.nth (entry_point_results, 3)))
       end
   | (_, _, errors) =>
       (List.app err errors; err (usage ()); OS.Process.exit OS.Process.failure)
