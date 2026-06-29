@@ -284,14 +284,20 @@ module blelloch_reid_miller = {
     -- 'm' sublists - this is a parameter we can adjust.
     let m = i64.min n (#[param(blelloch_reid_miller_num_sublists)] 200000)
     let (sublist_heads, S') = sublists m h (copy S)
-    -- TODO: figure out the maximum length of the sublists, and do a Wyllie that
-    -- only needs that many iterations.
+    -- R is the rank of each element within its sublist; T contains for each
+    -- element:
+    --
+    -- * if the element is the tail of its sublist, the negation of the index of
+    -- the successor sublist.
+    --
+    -- * otherwise, the index of the tail of the sublist.
     let (R, T) = sublist_ranking h S'
-    -- A lot of the conditionals are to account for the case of an empty
-    -- sublist, which can be the case for the last one (but we don't know which
-    -- one that is).
+    -- For each sublist, find the index of its tail. A lot of the conditionals
+    -- are to account for the case of an empty sublist, which can be the case
+    -- for the last one (but we don't know which one that is).
     let sublist_tails =
       map (\i -> if i < 0 || T[i] < 0 then i else T[i]) sublist_heads
+    -- Now construct a linked list of the heads of the sublists.
     let sublist_V =
       map (\h -> if h < 0 then 0 else R[h]) sublist_heads
     let sublist_S =
@@ -300,18 +306,21 @@ module blelloch_reid_miller = {
              then nil
              else -S'[t])
           sublist_tails
+    -- Scan on the heads of sublists.
     let carry_out = wyllie_scan (+) sublist_V sublist_S
+    -- Find the sublist index of each element.
     let elem_to_sublist =
       map2 (\t i ->
-              let t' =
-                if t < 0
-                then if S[i] < 0 then m else -t
-                else if T[t] < 0 && S[t] < 0
-                then m
-                else -T[t]
-              in t' - 1)
+              -- Find tail of sublist this element belongs to.
+              let t' = if t < 0 then t else T[t]
+              -- If tail of sublist is also tail of original list, then we are
+              -- in the last sublist, otherwise tail encodes our sublist
+              -- successor, which can decrement to get our sublist.
+              in if S[i] < 0 then m - 1 else -t' - 1)
            T
            (indices T)
+    -- Now update the elements of each sublist with the carry of its successor
+    -- sublist.
     let carry_ins =
       map (\i -> if i < m - 1 then carry_out[i + 1] else 0)
           elem_to_sublist
