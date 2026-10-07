@@ -41,26 +41,28 @@ module wyllie : list_ranking = {
 
 -- | Module for computing independent sets of lists.
 --
--- A independent set is a set of nodes from the list that have no
--- edges in common.
+-- An independent set is a set of nodes from the list such that no two
+-- members are consecutive in the list. The members are the nodes that are
+-- spliced out in a round.
 module type independent_set = {
   -- | The type of the set.
   type^ s
 
-  -- | Construction of a independent set from a time stamp, head node,
-  -- and a parent vector.
+  -- | Construction of an independent set from a time stamp, head node,
+  -- and a successor vector.
   val get_independent_set [n] : (t: i64) -> (h: i64) -> (succ: [n]i64) -> *s
 
-  --| Check if a node of the list is a member in the independent set.
+  -- | Is the node spliced out in this round? The members must form an
+  -- independent set. Membership of the tail is ignored.
   val is_member : s -> i64 -> bool
 
-  -- | Check if the list is smalle enough to default to wyllies list
-  -- ranking algorithm. The arguments given is the current list length
-  -- and the list length originally.
+  -- | Check if the list is small enough to default to Wyllie's list
+  -- ranking algorithm. The arguments are the current list length and the
+  -- original list length.
   val is_base_case : i64 -> i64 -> bool
 }
 
--- | Given a module for constructing a independent set create a list
+-- | Given a module for constructing an independent set, create a list
 -- ranking module.
 module list_ranking_independent_set (S: independent_set) : list_ranking = {
   type^ s = S.s
@@ -73,10 +75,6 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
 
   #[inline]
   def is_base_case = S.is_base_case
-
-  #[inline]
-  def gather [n] [m] 'a (as: [n]a) (is: [m]i64) =
-    map (\i -> as[i]) is
 
   #[inline]
   def step [n] (R: [n]i32) (S: [n]i64) =
@@ -112,56 +110,41 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
     then let final_rank[is[0]] = rank[0]
          in ([], [], [], final_rank, final_succ, h, t, removed, removed_offsets)
     else let set = get_independent_set t h succ
-         let is_active = tabulate m (is_member set)
-         let to_remove i a =
-           if succ[i] == nil
-           then nil
-           else if a
-           then succ[i]
-           else nil
-         let remove =
-           map2 to_remove (iota m) is_active
-         let keep = scatter (replicate m true) remove (rep false)
+         -- Nodes spliced out this round. The tail is never spliced out, and
+         -- a subset of an independent set is still independent.
+         let is_dead i = succ[i] != nil && is_member set i
+         let dead = tabulate m is_dead
+         let keep = map (not) dead
+         -- If the head is spliced out, its successor (which is kept) becomes
+         -- the new head.
+         let h' = if dead[h] then succ[h] else h
          let offsets =
            map (\b -> (i64.bool b, i64.bool (not b))) keep
            |> scan (\(a0, b0) (a1, b1) -> (a0 + a1, b0 + b1)) (0, 0)
          let counts = scatter [(0, 0)] (map (\i -> if i == m - 1 then 0 else -1) (iota m)) offsets
          let (num_active, num_dead) = counts[0]
          let (active_offsets, dead_offsets) = unzip offsets
+         -- A dead node is not the tail, so succ[i] /= nil, and its successor
+         -- is kept, so the successor has its final rank before this node is
+         -- restored.
          let (dead_is, dead_succ) =
-           map2 (\f i ->
-                   if f
-                   then (nil, nil)
-                   else ( is[i]
-                        , if succ[i] == nil
-                          then nil
-                          else is[succ[i]]
-                        ))
-                keep
+           map2 (\d i -> if d then (is[i], is[succ[i]]) else (nil, nil))
+                dead
                 (iota m)
            |> unzip2
          let removed_is = map2 (\f o -> if f then -1 else removed_offsets[t - 1] + o - 1) keep dead_offsets
          let removed = scatter removed removed_is (zip rank is)
          let final_succ = scatter final_succ dead_is dead_succ
          let active_is = map2 (\f o -> if f then o - 1 else -1) keep active_offsets
-         let update i a r s =
-           if succ[i] == nil
-           then (r, s)
-           else if a
-           then (rank[i] + rank[succ[i]], succ[succ[i]])
-           else (r, s)
-         let (new_rank, new_succ) =
-           unzip (map4 update (iota m) is_active rank succ)
+         -- A kept node jumps over its successor if the successor is dead.
+         let jump i =
+           let j = succ[i]
+           in if j != nil && is_dead j
+              then (rank[i] + rank[j], succ[j])
+              else (rank[i], j)
+         let (new_rank, new_succ) = unzip (tabulate m jump)
          let (rank, succ, is) =
-           map4 (\f r s i ->
-                   if f
-                   then ( r
-                        , if s == nil
-                          then nil
-                          else s
-                        , i
-                        )
-                   else (0, nil, nil))
+           map4 (\f r s i -> if f then (r, s, i) else (0, nil, nil))
                 keep
                 new_rank
                 new_succ
@@ -170,7 +153,7 @@ module list_ranking_independent_set (S: independent_set) : list_ranking = {
          let rank = scatter (#[scratch] copy rank) active_is rank
          let succ = scatter (#[scratch] copy succ) active_is succ
          let is = scatter (#[scratch] copy is) active_is is
-         let h = active_offsets[h] - 1
+         let h = active_offsets[h'] - 1
          let removed_offsets =
            if length removed_offsets == t
            then let removed_offsets = removed_offsets ++ map (const 0) removed_offsets
