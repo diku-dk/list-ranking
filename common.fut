@@ -145,6 +145,9 @@ def logk_ruling_set_filter [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
                   in selected[i] || (available[i] && ((not neighbor_is_available) || coin == 1)))
   in (color1, set)
 
+-- | Cole and Vishkin's original log n-ruling set (Section 2.1 of their
+-- paper), fused into a single map: each node decides for the node four
+-- steps ahead of it.
 def logk_ruling_set [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
   let next i = if succ[i] == nil then h else succ[i]
   let (colors, js_bools) =
@@ -212,16 +215,41 @@ def logk_ruling_set [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
   let bools = scatter (replicate n false) js bools
   in (colors, bools)
 
--- | Work efficient bucket sort with log n buckets, it does O(n) work
--- and has O(log n) span.
-def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ?[m].([m]i64, [n]i8, [n]a) =
+-- | One step of deterministic coin tossing. The colour of i is the position
+-- k of the lowest bit where i and its successor differ, followed by bit k
+-- of i. Neighbours always get different colours, and all colours are below
+-- 2 * ceil_log2 n.
+def dct_coloring [n] (h: i64) (succ: [n]i64) : [n]i8 =
+  let next i = if succ[i] == nil then h else succ[i]
+  in tabulate n (\i ->
+                   let k = lsb_diff i (next i)
+                   in 2 * k + bit i k)
+
+-- | A (4 * ceil_log2 n)-ruling set: the strict local minima of the
+-- deterministic coin tossing colouring. The list is treated as a cycle so
+-- every node has two neighbours. Each node i decides for its successor v,
+-- so the predecessor of v is i and no predecessor array is needed.
+def dct_ruling_set [n] (h: i64) (succ: [n]i64) : ([n]i8, [n]bool) =
+  if n == 1
+  then (replicate n 0, replicate n true)
+  else let next i = if succ[i] == nil then h else succ[i]
+       let c = dct_coloring h succ
+       let rulers =
+         tabulate n (\i ->
+                       let v = next i
+                       in if c[i] > c[v] && c[v] < c[next v] then v else nil)
+       in (c, scatter (replicate n false) rulers (rep true))
+
+-- | Work efficient bucket sort of keys in [0, num_buckets). With
+-- num_buckets = O(log n) it does O(n) work and has O(log n) span.
+def logn_bucket_sort 'a [n] (num_buckets: i64) (keys: [n]i8) (values: [n]a) : ?[m].([m]i64, [n]i8, [n]a) =
   let block_size = ceil_log2 n
   let block_num = (n + block_size - 1) / block_size
   let block_count block_i =
     let start = block_i * block_size
     let end = i64.min n ((block_i + 1) * block_size)
     let rank = replicate block_size (-1i8)
-    let count = replicate block_size 0i64
+    let count = replicate num_buckets 0i64
     let block_keys = keys[start:end]
     in loop (rank, count)
        for (j, i) in zip (indices block_keys) block_keys do
@@ -240,7 +268,7 @@ def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ?[m].([m]i64, [n]i8, 
     map (\i -> if i % block_num == 0 then i / block_num else nil)
         (indices exprefix_sum)
   let seg_offsets =
-    scatter (replicate block_size 0)
+    scatter (replicate num_buckets 0)
             js
             exprefix_sum
   let offsets =
@@ -258,34 +286,58 @@ def logn_bucket_sort 'a [n] (keys: [n]i8) (values: [n]a) : ?[m].([m]i64, [n]i8, 
   let seg_offsets = map (\i -> seg_offsets[i]) seg_offsets_is
   in (seg_offsets, sorted_keys, sorted_values)
 
--- | Construct a 2-ruling set.
-def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+-- | 2-ruling sets of lists with at most three nodes.
+def small_two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
   if n == 1
   then replicate n true
   else if n == 2
   then (replicate n false) with [h] = true
-  else if n == 3
-  then ((replicate n false) with [h] = true) with [succ[succ[h]]] = true
-  else let next i = if succ[i] == nil then h else succ[i]
-       -- Use logk_ruling_set for initial set, also recover color1 for bucket sort
-       let (color1, set) = copy (logk_ruling_set h succ)
-       -- Sort by color of successor: j becomes pred[v] where v = next j
-       let (offsets, _, is) = logn_bucket_sort (map (\j -> color1[next j]) (iota n)) (iota n)
-       let spans =
-         indices offsets
-         |> map (\i ->
-                   if i == length offsets - 1
-                   then (offsets[i], n)
-                   else (offsets[i], offsets[i + 1]))
-       let set =
-         loop set
-         for (start, end) in spans do
-           let js = is[start:end]
-           -- v = next j, so pred[v]=j and succ[v]=next(next j) are free — no pred array needed
-           let flags = map (\j -> not set[j] && not set[next j] && not set[next (next j)]) js
-           let set = scatter set (map2 (\f j -> if f then next j else nil) flags js) (rep true)
-           in set
-       in set
+  else ((replicate n false) with [h] = true) with [succ[succ[h]]] = true
+
+-- | Extend a ruling set to a 2-ruling set by sweeping the colour classes
+-- one at a time. A node is added if neither it nor its neighbours are in
+-- the set. Nodes within a class are added in parallel, which is only safe
+-- if no two nodes of the same colour are neighbours.
+def sweep_colour_classes [n]
+                         (h: i64)
+                         (succ: [n]i64)
+                         (num_colors: i64)
+                         (color: [n]i8)
+                         (set: *[n]bool) : [n]bool =
+  let next i = if succ[i] == nil then h else succ[i]
+  -- Sort by color of successor: j becomes pred[v] where v = next j
+  let (offsets, _, is) =
+    logn_bucket_sort num_colors (map (\j -> color[next j]) (iota n)) (iota n)
+  let spans =
+    indices offsets
+    |> map (\i ->
+              if i == length offsets - 1
+              then (offsets[i], n)
+              else (offsets[i], offsets[i + 1]))
+  in loop set
+     for (start, end) in spans do
+       let js = is[start:end]
+       -- v = next j, so pred[v]=j and succ[v]=next(next j) are free — no pred array needed
+       let flags = map (\j -> not set[j] && not set[next j] && not set[next (next j)]) js
+       in scatter set (map2 (\f j -> if f then next j else nil) flags js) (rep true)
+
+-- | Construct a 2-ruling set, starting from Cole and Vishkin's original
+-- log n-ruling set. Its colouring has ceil_log2 n colours, but neighbours
+-- may share a colour.
+def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+  if n <= 3
+  then small_two_ruling_set h succ
+  else let (color, set) = logk_ruling_set h succ
+       in sweep_colour_classes h succ (ceil_log2 n) color (copy set)
+
+-- | Construct a 2-ruling set, starting from the deterministic coin tossing
+-- ruling set. Its colouring is proper, with 2 * ceil_log2 n colours, so
+-- each colour class can safely be added in parallel.
+def dct_two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+  if n <= 3
+  then small_two_ruling_set h succ
+  else let (color, set) = dct_ruling_set h succ
+       in sweep_colour_classes h succ (2 * ceil_log2 n) color (copy set)
 
 module rng_engine = minstd_rand
 module rand_i32 = uniform_int_distribution i32 u32 rng_engine
@@ -329,7 +381,7 @@ def is_k_ruling_set [n] (k: i64) (succ: [n]i64) (selected: [n]bool) : bool =
   in no_adjacent && can_reach_within_k
 
 -- ==
--- entry: test_two_ruling_set test_logn_ruling_set
+-- entry: test_two_ruling_set test_dct_two_ruling_set test_logn_ruling_set test_dct_ruling_set
 -- "n=10000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=10000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=10000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
@@ -340,10 +392,18 @@ entry test_two_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
   let ruling_set = two_ruling_set h succ
   in is_k_ruling_set 2 succ ruling_set
 
+entry test_dct_two_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
+  let ruling_set = dct_two_ruling_set h succ
+  in is_k_ruling_set 2 succ ruling_set
+
 entry test_logn_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
   let k = ceil_log2 n
   let (_, ruling_set) = logk_ruling_set h succ
   in is_k_ruling_set k succ ruling_set
+
+entry test_dct_ruling_set [n] (h: i64) (succ: [n]i64) : bool =
+  let (_, ruling_set) = dct_ruling_set h succ
+  in is_k_ruling_set (4 * ceil_log2 n) succ ruling_set
 
 -- ==
 -- entry: test_blocked_list_valid
@@ -389,7 +449,7 @@ def gen_random_keys (n: i64) (seed: i32) : [n]i8 =
 entry test_logn_bucket_sort (n: i64) (seed: i32) : (bool, bool) =
   let keys = gen_random_keys n seed
   let values = iota n
-  let (_, sorted_keys, sorted_values) = logn_bucket_sort keys values
+  let (_, sorted_keys, sorted_values) = logn_bucket_sort (ceil_log2 n) keys values
   let sorted = is_sorted sorted_keys
   let stable = is_stable sorted_keys sorted_values
   in (sorted, stable)

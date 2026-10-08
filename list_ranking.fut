@@ -229,6 +229,23 @@ module cole_vishkin : list_ranking =
 module cole_vishkin_bounded : list_ranking =
   list_ranking_independent_set (cole_vishkin_state {def is_base_case m n = m < n / floor_log2 n})
 
+-- | Cole/Vishkin's list ranking algorithm, using the 2-ruling set built from
+-- the proper deterministic coin tossing colouring.
+module dct_cole_vishkin_state (B: {val is_base_case : i64 -> i64 -> bool}) : independent_set = {
+  type^ s = ?[n].[n]bool
+  def is_member [n] (s: [n]bool) (i: i64) : bool = s[i]
+  def is_base_case = B.is_base_case
+
+  def get_independent_set [n] (_: i64) (h: i64) (succ: [n]i64) : *[n]bool =
+    dct_two_ruling_set h (copy succ)
+}
+
+module dct_cole_vishkin : list_ranking =
+  list_ranking_independent_set (dct_cole_vishkin_state {def is_base_case _ _ = false})
+
+module dct_cole_vishkin_bounded : list_ranking =
+  list_ranking_independent_set (dct_cole_vishkin_state {def is_base_case m n = m < n / floor_log2 n})
+
 -- The Blelloch/Reid-Miller algorithm from "List Ranking and List Scan on the
 -- Cray C90", further described in Margaret Reid-Miller's PhD thesis
 -- "Experiments with Parallel Pointer-Based Algorithms" which is also where the
@@ -318,7 +335,7 @@ def mk_test list_ranking h S =
 entry blocked_list = blocked_list
 
 -- ==
--- entry: sequential_test random_mate_test random_mate_bounded_test cole_vishkin_test cole_vishkin_bounded_test blelloch_reid_miller_test
+-- entry: sequential_test random_mate_test random_mate_bounded_test cole_vishkin_test cole_vishkin_bounded_test dct_cole_vishkin_test dct_cole_vishkin_bounded_test blelloch_reid_miller_test
 -- "n=100000,s=1"     compiled nobench script input { blocked_list 10000i64 1i64 }  output { true }
 -- "n=100000,s=10"    compiled nobench script input { blocked_list 10000i64 10i64 } output { true }
 -- "n=100000,s=100"   compiled nobench script input { blocked_list 10000i64 100i64 } output { true }
@@ -329,6 +346,8 @@ entry random_mate_bounded_test = mk_test random_mate_bounded.list_ranking
 entry cole_vishkin_test = mk_test cole_vishkin.list_ranking
 entry cole_vishkin_bounded_test = mk_test cole_vishkin_bounded.list_ranking
 entry blelloch_reid_miller_test = mk_test blelloch_reid_miller.list_ranking
+entry dct_cole_vishkin_test = mk_test dct_cole_vishkin.list_ranking
+entry dct_cole_vishkin_bounded_test = mk_test dct_cole_vishkin_bounded.list_ranking
 
 -- entry: sequential_bench
 -- compiled notest script input { blocked_list 1000000i64 1i64 }
@@ -341,7 +360,7 @@ entry blelloch_reid_miller_test = mk_test blelloch_reid_miller.list_ranking
 entry sequential_bench = sequential.list_ranking
 
 -- ==
--- entry: wyllie_bench random_mate_bench random_mate_bounded_bench cole_vishkin_bench cole_vishkin_bounded_bench blelloch_reid_miller_bench
+-- entry: wyllie_bench random_mate_bench random_mate_bounded_bench cole_vishkin_bench cole_vishkin_bounded_bench dct_cole_vishkin_bench dct_cole_vishkin_bounded_bench blelloch_reid_miller_bench
 -- compiled notest script input { blocked_list 100000000i64 1i64 }
 -- compiled notest script input { blocked_list 100000000i64 10i64 }
 -- compiled notest script input { blocked_list 100000000i64 100i64 }
@@ -357,6 +376,8 @@ entry random_mate_bounded_bench = random_mate_bounded.list_ranking
 entry cole_vishkin_bench = cole_vishkin.list_ranking
 entry cole_vishkin_bounded_bench = cole_vishkin_bounded.list_ranking
 entry blelloch_reid_miller_bench = blelloch_reid_miller.list_ranking
+entry dct_cole_vishkin_bench = dct_cole_vishkin.list_ranking
+entry dct_cole_vishkin_bounded_bench = dct_cole_vishkin_bounded.list_ranking
 
 entry average_stride [n] (S: [n]i64) =
   map2 (\i s -> f64.i64 (i64.abs (i - s))) (indices S) S
