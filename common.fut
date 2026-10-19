@@ -333,7 +333,7 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : *[n]bool =
 -- | Construct a 2-ruling set, starting from the deterministic coin tossing
 -- ruling set. Its colouring is proper, with 2 * ceil_log2 n colours, so
 -- each colour class can safely be added in parallel.
-def dct_two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def dct_two_ruling_set [n] (h: i64) (succ: [n]i64) : *[n]bool =
   if n <= 3
   then small_two_ruling_set h succ
   else let (color, set) = dct_ruling_set h succ
