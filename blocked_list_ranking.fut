@@ -94,8 +94,9 @@ def blocked_list_ranking_filter [n] (selected: [n]bool) (succ: [n]i64) : [n]i32 
       let active = scatter active js (map (.0) queue)
       let active_rank = scatter active_rank js (map (.1) queue)
       let queue =
-        map2 (\f (a, r, i) -> if f then (succ[a], r + 1, i) else (a, r, i)) flags queue
-        |> scatter (map (const (0, 0, 0)) queue) is
+        scatter (map (const (0, 0, 0)) queue)
+                is
+                (map2 (\f (a, r, i) -> if f then (succ[a], r + 1, i) else (a, r, i)) flags queue)
       in (active, active_rank, queue[:count[0]])
   let ruler_list =
     scatter (map (const nil) (indices active_after))
@@ -123,7 +124,8 @@ def blocked_list_ranking_filter [n] (selected: [n]bool) (succ: [n]i64) : [n]i32 
       let (active, active_rank) = unzip queue
       let rank = scatter rank active active_rank
       let queue =
-        map (\(a, r) -> if a == nil then (a, r) else (succ[a], r)) queue
-        |> scatter (map (const (nil, 0)) queue) is
+        scatter (map (const (nil, 0)) queue)
+                is
+                (map (\(a, r) -> if a == nil then (a, r) else (succ[a], r)) queue)
       in (rank, queue[:count[0]])
   in rank
