@@ -287,7 +287,7 @@ def logn_bucket_sort 'a [n] (num_buckets: i64) (keys: [n]i8) (values: [n]a) : ?[
   in (seg_offsets, sorted_keys, sorted_values)
 
 -- | 2-ruling sets of lists with at most three nodes.
-def small_two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def small_two_ruling_set [n] (h: i64) (succ: [n]i64) : *[n]bool =
   if n == 1
   then replicate n true
   else if n == 2
@@ -303,7 +303,7 @@ def sweep_colour_classes [n]
                          (succ: [n]i64)
                          (num_colors: i64)
                          (color: [n]i8)
-                         (set: *[n]bool) : [n]bool =
+                         (set: *[n]bool) : *[n]bool =
   let next i = if succ[i] == nil then h else succ[i]
   -- Sort by color of successor: j becomes pred[v] where v = next j
   let (offsets, _, is) =
@@ -324,7 +324,7 @@ def sweep_colour_classes [n]
 -- | Construct a 2-ruling set, starting from Cole and Vishkin's original
 -- log n-ruling set. Its colouring has ceil_log2 n colours, but neighbours
 -- may share a colour.
-def two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
+def two_ruling_set [n] (h: i64) (succ: [n]i64) : *[n]bool =
   if n <= 3
   then small_two_ruling_set h succ
   else let (color, set) = logk_ruling_set h succ
