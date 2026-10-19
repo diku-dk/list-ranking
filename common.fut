@@ -330,18 +330,11 @@ def two_ruling_set [n] (h: i64) (succ: [n]i64) : *[n]bool =
   else let (color, set) = logk_ruling_set h succ
        in sweep_colour_classes h succ (ceil_log2 n) color (copy set)
 
-<<<<<<< HEAD
 -- | Construct a 2-ruling set from the deterministic coin tossing colouring.
 -- The colouring is proper, with 2 * ceil_log2 n colours, so sweeping the
 -- colour classes from an empty set yields a maximal independent set, which
 -- is a 2-ruling set.
-def dct_two_ruling_set [n] (h: i64) (succ: [n]i64) : [n]bool =
-=======
--- | Construct a 2-ruling set, starting from the deterministic coin tossing
--- ruling set. Its colouring is proper, with 2 * ceil_log2 n colours, so
--- each colour class can safely be added in parallel.
 def dct_two_ruling_set [n] (h: i64) (succ: [n]i64) : *[n]bool =
->>>>>>> 89bf7b4329802b637f73e9032755a0b9a3f3e5ce
   if n <= 3
   then small_two_ruling_set h succ
   else let color = dct_coloring h succ
