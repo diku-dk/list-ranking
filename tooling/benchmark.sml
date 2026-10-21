@@ -176,6 +176,7 @@ fun main () =
           [ "wyllie_bench"
           , "random_mate_bounded_bench"
           , "cole_vishkin_bounded_bench"
+          , "dct_cole_vishkin_bounded_bench"
           , "blelloch_reid_miller_bench"
           ]
         val baseline_entry_point = hd entry_points
@@ -204,8 +205,10 @@ fun main () =
           (List.nth (entry_point_results, 1)));
         writeFile "cole_vishkin.scaling" (genScalingTable
           (List.nth (entry_point_results, 2)));
+        writeFile "dct_cole_vishkin.scaling" (genScalingTable
+          (List.nth (entry_point_results, 3)));
         writeFile "blelloch_reid_miller.scaling" (genScalingTable
-          (List.nth (entry_point_results, 3)))
+          (List.nth (entry_point_results, 4)))
       end
   | (_, _, errors) =>
       (List.app err errors; err (usage ()); OS.Process.exit OS.Process.failure)
