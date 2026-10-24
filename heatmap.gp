@@ -32,7 +32,7 @@ set output "heatmap_cole_vishkin.png"
 splot 'cole_vishkin.speedups' matrix with image pixels
 
 set title "Speedup of DCT Cole-Vishkin over Wyllie"
-set output "dct_heatmap_cole_vishkin.png"
+set output "heatmap_dct_cole_vishkin.png"
 splot 'dct_cole_vishkin.speedups' matrix with image pixels
 
 set title "Speedup of Blelloch/Reid-Miller over Wyllie"
