@@ -197,8 +197,11 @@ fun main () =
           (List.nth (entry_point_results, 1)));
         writeFile "cole_vishkin.speedups" (genSpeedupTable baseline_results
           (List.nth (entry_point_results, 2)));
+        writeFile "dct_cole_vishkin.speedups" (genSpeedupTable baseline_results
+          (List.nth (entry_point_results, 3)));
         writeFile "blelloch_reid_miller.speedups"
-          (genSpeedupTable baseline_results (List.nth (entry_point_results, 3)));
+          (genSpeedupTable baseline_results (List.nth (entry_point_results, 4)));
+
         writeFile "wyllie.scaling" (genScalingTable
           (List.nth (entry_point_results, 0)));
         writeFile "random_mate.scaling" (genScalingTable
